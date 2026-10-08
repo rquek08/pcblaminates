@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Copper and laminate expansion</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; color: #243e38; }
+    .viewer {
+      min-height: 544px; padding: 22px 24px 18px; overflow: hidden;
+      border: 1px solid #dce7e2; border-radius: 20px;
+      background: radial-gradient(ellipse at 50% 48%, #fff 0%, #f3f8f5 75%);
+    }
+    h2 { margin: 0 0 6px; font-size: 18px; font-weight: 650; }
+    .intro, .note { margin: 0; color: #60756d; font-size: 13px; line-height: 1.5; }
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+    button {
+      font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+      border: 1px solid #cbdcd3; background: #fff; color: #315e50;
+      border-radius: 999px; padding: 8px 18px; transition: background .2s;
+    }
+    button:hover:not(:disabled) { background: #e7f1eb; }
+    button:disabled { cursor: not-allowed; opacity: .45; }
+    button[aria-pressed="true"]:disabled { opacity: 1; }
+    button:focus-visible { outline: 3px solid #368575; outline-offset: 3px; }
+    button[aria-pressed="true"] { background: #368575; border-color: #368575; color: #fff; }
+    #reset { margin-left: auto; background: transparent; font-weight: 400; }
+    .scene { position: relative; height: 290px; perspective: 900px; }
+    .stack {
+      position: absolute; left: 50%; top: 48%; width: 260px; height: 156px;
+      transform: translate(-50%, -50%) rotateX(58deg) rotateZ(-32deg);
+      transform-style: preserve-3d;
+    }
+    .layer {
+      position: absolute; inset: 0; transform-style: preserve-3d;
+      transition: transform 1.4s cubic-bezier(.22, .7, .25, 1);
+    }
+    .laminate { --thickness: 58px; --top: #648d76; --front: #38634d; --side: #4a765e; }
+    .copper {
+      --thickness: 8px; --top: #e0a175; --front: #a45b36; --side: #bf764b;
+      transform: translateZ(49px);
+    }
+    .face { position: absolute; backface-visibility: hidden; border: 1px solid rgb(0 0 0 / 8%); }
+    .top, .bottom { inset: 0; background: var(--top); }
+    .top { transform: translateZ(calc(var(--thickness) / 2)); }
+    .bottom { transform: translateZ(calc(var(--thickness) / -2)) rotateX(180deg); }
+    .front, .back { width: 100%; height: var(--thickness); background: var(--front); }
+    .front { top: calc(100% - var(--thickness) / 2); transform: rotateX(-90deg); }
+    .back { top: calc(var(--thickness) / -2); transform: rotateX(90deg); }
+    .left, .right { width: var(--thickness); height: 100%; background: var(--side); }
+    .left { left: calc(var(--thickness) / -2); transform: rotateY(-90deg); }
+    .right { left: calc(100% - var(--thickness) / 2); transform: rotateY(90deg); }
+    .laminate .front, .laminate .back {
+      background: repeating-linear-gradient(0deg, #38634d 0 6px, #416e56 6px 7px);
+    }
+    .copper .top { background: linear-gradient(120deg, #c57d50, #edb98d 48%, #d58c5b); }
+    .shadow {
+      position: absolute; inset: -24px; background: rgb(39 71 51 / 14%);
+      filter: blur(18px); transform: translateZ(-48px); border-radius: 30px;
+    }
+    .viewer[data-mode="moisture"] .laminate { transform: scale3d(1.18, 1.18, 1.25); }
+    .viewer[data-mode="heat"] .laminate { transform: scale3d(1.10, 1.10, 1.10); }
+    .viewer[data-mode="heat"] .copper { transform: translateZ(49px) scale3d(1.17, 1.17, 1.17); }
+    .legend { display: flex; justify-content: center; gap: 24px; font-size: 13px; margin: -8px 0 16px; }
+    .legend span { display: flex; align-items: center; gap: 8px; }
+    .swatch { width: 12px; height: 12px; border-radius: 3px; background: #d58c5b; }
+    .swatch.laminate-swatch { background: #648d76; }
+    #status { min-height: 44px; font-size: 14px; line-height: 1.5; margin: 0 0 10px; }
+    .note { font-size: 11px; }
+    @media (max-width: 420px) {
+      .viewer { padding: 18px 14px; }
+      .stack { width: 210px; height: 126px; }
+      .scene { height: 270px; }
+      button { padding: 8px 14px; }
+      .legend { gap: 16px; }
+    }
+    @media (prefers-reduced-motion: reduce) { .layer, button { transition: none; } }
+  </style>
+</head>
+<body>
+  <section class="viewer" data-mode="rest" aria-label="Interactive PCB layer illustration">
+    <h2>Inside a copper–laminate interface</h2>
+    <p class="intro">Choose one exposure. Click Reset before choosing again.</p>
+    <div class="controls" role="group" aria-label="Exposure controls">
+      <button type="button" data-exposure="moisture" aria-pressed="false">Moisture</button>
+      <button type="button" data-exposure="heat" aria-pressed="false">Heat</button>
+      <button type="button" id="reset" aria-label="Reset layers to their original size">Reset</button>
+    </div>
+    <div class="scene" role="img" aria-label="A thin copper foil above a thicker green laminate, shown in 3D">
+      <div class="stack">
+        <div class="shadow"></div>
+        <div class="layer laminate">
+          <div class="face top"></div><div class="face bottom"></div>
+          <div class="face front"></div><div class="face back"></div>
+          <div class="face left"></div><div class="face right"></div>
+        </div>
+        <div class="layer copper">
+          <div class="face top"></div><div class="face bottom"></div>
+          <div class="face front"></div><div class="face back"></div>
+          <div class="face left"></div><div class="face right"></div>
+        </div>
+      </div>
+    </div>
+    <div class="legend" aria-hidden="true">
+      <span><i class="swatch"></i>Copper foil</span>
+      <span><i class="swatch laminate-swatch"></i>Laminate</span>
+    </div>
+    <p id="status" role="status" aria-live="polite">Original dimensions. Choose Moisture or Heat to compare expansion.</p>
+    <p class="note">Schematic free expansion, exaggerated for visibility. Layers are separated for clarity.
+      Heat illustrates copper expanding more than a lower-CTE laminate; actual behaviour depends on material and direction.</p>
+  </section>
+  <script>
+    const viewer = document.querySelector('.viewer');
+    const scene = document.querySelector('.scene');
+    const status = document.querySelector('#status');
+    const buttons = document.querySelectorAll('[data-exposure]');
+    const descriptions = {
+      rest: 'Original dimensions. Choose Moisture or Heat to compare expansion.',
+      moisture: 'Moisture: the laminate swells in length, width and thickness. The copper foil stays the same size. Click Reset to choose another exposure.',
+      heat: 'Heat: both layers expand. Different coefficients of thermal expansion (CTE) produce different amounts of expansion. Click Reset to choose another exposure.'
+    };
+    function selectExposure(mode) {
+      // An exposure stays locked until the user explicitly resets the layers.
+      if (mode !== 'rest' && viewer.dataset.mode !== 'rest') return;
+      viewer.dataset.mode = mode;
+      buttons.forEach(button => {
+        button.disabled = mode !== 'rest';
+        button.setAttribute('aria-pressed', String(button.dataset.exposure === mode));
+      });
+      status.textContent = descriptions[mode];
+      scene.setAttribute('aria-label', descriptions[mode]);
+    }
+    buttons.forEach(button => button.addEventListener('click', () => selectExposure(button.dataset.exposure)));
+    document.querySelector('#reset').addEventListener('click', () => selectExposure('rest'));
+  </script>
+</body>
+</html>
