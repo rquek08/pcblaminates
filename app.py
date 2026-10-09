@@ -535,6 +535,8 @@ def render_simulation_inputs():
         metadata = PRESET_METADATA.get(st.session_state["preset_selector"])
         if metadata:
             st.caption(f"Materials library reference: {metadata['material_class']} · {metadata['condition']}.")
+            st.caption("Preset material properties are compiled from publicly available manufacturer datasets "
+                       "and technical datasheets for reference. Original sources retain their respective rights.")
 
         st.markdown('<h3 class="scenario-section-heading">Exposure &amp; Geometry</h3>', unsafe_allow_html=True)
         temperature, duration, thickness, copper = st.columns(4)

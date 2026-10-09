@@ -47,7 +47,7 @@ def render_sensitivity(simulation_scenario):
                                   key="sens_output", persist_state="session")
         p = reference_baseline(study) if baseline_source == "Default reference scenario" else dict(simulation_scenario)
         if baseline_source == "Default reference scenario":
-            st.caption("The default reference scenario is a built-in example."
+            st.caption("The default reference scenario is a built-in example. "
                        "View or edit its unvaried properties under Fixed inputs for this study.")
         else:
             st.caption("Start from your most recent Stress Analyser inputs. "
