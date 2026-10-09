@@ -1,5 +1,7 @@
-streamlit
+streamlit>=1.64
 numpy
 pandas
 matplotlib
 plotly
+scipy>=1.10
+openpyxl>=3.1
