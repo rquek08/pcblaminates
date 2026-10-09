@@ -225,6 +225,23 @@ NAVIGATION = ["Stress Analyser", "Sensitivity Analysis", "Inverse Exploration"]
 
 def navigate(section=None):
     st.session_state["main_navigation"] = section
+    st.session_state["scroll_to_top"] = True
+
+
+def scroll_to_top_after_navigation():
+    if not st.session_state.pop("scroll_to_top", False):
+        return
+    # st.html executes in the app document, where Streamlit's main scroll
+    # container lives. Wait for the destination's elements to finish mounting.
+    st.html("""
+    <script>
+    requestAnimationFrame(() => {
+        const main = document.querySelector('[data-testid="stMain"]');
+        if (main) main.scrollTo({top: 0, left: 0, behavior: "instant"});
+        window.scrollTo({top: 0, left: 0, behavior: "instant"});
+    });
+    </script>
+    """, unsafe_allow_javascript=True)
 
 
 def render_style():
@@ -691,6 +708,7 @@ def main():
         render_inverse_exploration()
     else:
         render_home()
+    scroll_to_top_after_navigation()
 
 
 if __name__ == "__main__":
