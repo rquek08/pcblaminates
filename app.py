@@ -6,15 +6,18 @@ import numpy as np
 import plotly.graph_objects as go
 from pathlib import Path
 
-# Load both sensitivity files from this app's folder, including when older
+# Load the exploration modules from this app's folder, including when older
 # copies from the parent folder are already in Python's module cache.
 for module_name, filename in (("sensitivity_analysis", "sensitivity_analysis.py"),
-                              ("_pcb_sensitivity_view", "sensitivity_view.py")):
+                              ("_pcb_sensitivity_view", "sensitivity_view.py"),
+                              ("inverse_analysis", "inverse_analysis.py"),
+                              ("_pcb_inverse_view", "inverse_view.py")):
     sensitivity_spec = spec_from_file_location(module_name, Path(__file__).parent / filename)
     sensitivity_module = module_from_spec(sensitivity_spec)
     sys.modules[module_name] = sensitivity_module
     sensitivity_spec.loader.exec_module(sensitivity_module)
 render_sensitivity = sys.modules["_pcb_sensitivity_view"].render_sensitivity
+render_inverse = sys.modules["_pcb_inverse_view"].render_inverse
 
 # -----------------------------------------------------------------------------
 # Configuration & Constants
@@ -492,9 +495,9 @@ def render_home():
         with st.container(border=False, height="stretch", key="home_inverse_card"):
             render_exploration_icon(INVERSE_EXPLORATION_ICON)
             st.caption("03 · INVERSE EXPLORATION")
-            st.markdown("#### Design for target response")
-            st.write("Design a laminate to meet specific performance requirements. Start with a desired response and explore "
-                     "possible inputs.")
+            st.markdown("#### Explore a feasible design space")
+            st.write("Define exposure and geometry constraints. Explore material-property combinations "
+                     "and compare library entries against a chosen stress-index limit.")
         st.button("View section →", on_click=navigate, args=(NAVIGATION[2],), key="home_inverse")
     st.caption("The explorer calculates an analytical mismatch stress index. "
                "Delamination assessment requires specific geometry and interface adhesion data.")
@@ -657,16 +660,12 @@ def render_simulation():
     )
 
 
-def render_placeholder(section):
+def render_inverse_exploration():
     with st.container(horizontal=True, wrap=False, vertical_alignment="center",
                       gap="small", key="inverse_exploration_header"):
         render_exploration_icon(INVERSE_EXPLORATION_ICON)
-        st.title(section)
-    with st.container(border=True):
-        st.markdown("### Coming next")
-        st.write("This section is ready for the workflow and controls you specify next.")
-        st.button("Open the stress explorer →", on_click=navigate, args=(NAVIGATION[0],),
-                  key="placeholder_simulation")
+        st.title("Inverse Exploration")
+    render_inverse(MATERIAL_LIBRARY["presets"])
 
 
 def main():
@@ -689,7 +688,7 @@ def main():
             scenario[key] = snapshot.get(f"field_{key}", scenario[key])
         render_sensitivity(scenario)
     elif section == NAVIGATION[2]:
-        render_placeholder(section)
+        render_inverse_exploration()
     else:
         render_home()
 
