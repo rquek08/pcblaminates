@@ -227,6 +227,10 @@ def render_style():
     .flow-merge { height: 80px; }
     .flow-merge svg { display: block; width: 100%; height: 80px; }
     .flow-merge-mobile { display: none; }
+    .exploration-icon { display: flex; align-items: center; justify-content: center;
+        width: 48px; height: 48px; margin-bottom: .5rem; border-radius: 12px;
+        background: rgba(54,133,117,.1); color: #368575; }
+    .exploration-icon svg { width: 28px; height: 28px; }
     [data-testid="stMetricValue"] { font-size: 1.8rem; }
     @media (max-width: 760px) {
         .block-container { padding-top: 1rem; }
@@ -339,6 +343,16 @@ def render_home_stress_flow():
         st.caption("The stiffness factor Eeff/(1 − νeff) represents an effective linear-elastic, equibiaxial in-plane constraint.")
 
 
+def render_exploration_icon(shapes):
+    st.markdown(
+        '<div class="exploration-icon" aria-hidden="true">'
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+        f'{shapes}</svg></div>',
+        unsafe_allow_html=True,
+    )
+
+
 def render_home():
     text, illustration = st.columns([1.05, 1], gap="large", vertical_alignment="top")
     with text:
@@ -370,28 +384,44 @@ def render_home():
     render_home_stress_flow()
 
     st.write("")
-    st.subheader("Explore the connection from material to response")
-    simulation, sensitivity, inverse = st.columns(3, gap="medium")
-    with simulation.container(border=True):
-        st.caption("01 · STRESS ANALYSER")
-        st.markdown("#### Follow the physics")
-        st.write("Choose a laminate and exposure conditions. Trace moisture uptake, "
-                 "swelling, and thermal mismatch through the existing calculation pipeline.")
-        st.button("Explore a scenario →", on_click=navigate, args=(NAVIGATION[0],), key="home_simulation")
-    with sensitivity.container(border=True):
-        st.caption("02 · SENSITIVITY ANALYSIS")
-        st.markdown("#### Understand what matters")
-        st.write("A dedicated space for exploring the influence of material properties "
-                 "and exposure conditions. Compare their main effects and interactions with Sobol analysis.")
+    st.subheader("Laminate Stress Explorer")
+    st.caption("Evaluate stress simulations, parameter sensitivity, and inverse exploration.")
+    simulation, sensitivity, inverse = st.columns(3, gap="medium", border=True)
+    with simulation:
+        with st.container(border=False, height="stretch", key="home_simulation_card"):
+            render_exploration_icon(
+                '<path d="m12 3 10 5-10 5L2 8 12 3Z" />'
+                '<path d="m2 12 10 5 10-5M2 16l10 5 10-5" />'
+            )
+            st.caption("01 · STRESS ANALYSER")
+            st.markdown("#### Follow the physics")
+            st.write("Input properties of your chosen laminate and its exposure conditions. Calculate moisture uptake, "
+                     "swelling, and thermal mismatch to evaluate the resulting stress.")
+        st.button("View section →", on_click=navigate, args=(NAVIGATION[0],), key="home_simulation")
+    with sensitivity:
+        with st.container(border=False, height="stretch", key="home_sensitivity_card"):
+            render_exploration_icon(
+                '<path d="M4 3v17h17M9 16V9M14 16V5M19 16v-4" />'
+            )
+            st.caption("02 · SENSITIVITY ANALYSIS")
+            st.markdown("#### Understand what matters")
+            st.write("Explore the influence of material properties "
+                     "and exposure conditions on the relevant strains and stresses. Compare their main effects and interactions with Sobol analysis.")
         st.button("View section →", on_click=navigate, args=(NAVIGATION[1],), key="home_sensitivity")
-    with inverse.container(border=True):
-        st.caption("03 · INVERSE EXPLORATION")
-        st.markdown("#### Work back from a target")
-        st.write("A dedicated space for starting with a desired response and exploring "
-                 "possible inputs. Exploration tools will be added in a later step.")
+    with inverse:
+        with st.container(border=False, height="stretch", key="home_inverse_card"):
+            render_exploration_icon(
+                '<circle cx="11" cy="13" r="9" />'
+                '<circle cx="11" cy="13" r="5" />'
+                '<path d="m11 13 9-9M16 4h4v4" />'
+            )
+            st.caption("03 · INVERSE EXPLORATION")
+            st.markdown("#### Design for target response")
+            st.write("Design a laminate to meet specific performance requirements. Start with a desired response and explore "
+                     "possible inputs.")
         st.button("View section →", on_click=navigate, args=(NAVIGATION[2],), key="home_inverse")
     st.caption("The explorer calculates an analytical mismatch stress index. "
-               "Delamination assessment also requires geometry and interface adhesion data.")
+               "Delamination assessment requires specific geometry and interface adhesion data.")
 
 
 def load_preset_values():
