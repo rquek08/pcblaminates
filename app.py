@@ -632,25 +632,6 @@ def render_simulation():
         "physical measurements, including interface adhesion tests under the relevant exposure conditions."
     )
 
-    # -----------------------------------------------------------------------------
-    # 3D Hygrothermal Deformation Visualizer
-    # -----------------------------------------------------------------------------
-    st.markdown("---")
-    st.subheader("3D Bi-layer Deformation & Interfacial Behavior")
-    st.caption(
-        "Click **Play Deformation** to view a scaled illustration of the calculated mismatch strain. "
-        "This schematic does not calculate physical warpage or interfacial tractions."
-    )
-
-    fig_3d = render_3d_deformation(
-        eps_h=res["eps_h"],
-        eps_t=res["eps_t"],
-        eps_net=res["eps_net"]
-    )
-
-    st.plotly_chart(fig_3d, width="stretch")
-
-
 
 def render_placeholder(section):
     st.title(section)
