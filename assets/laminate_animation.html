@@ -52,7 +52,14 @@
     .laminate .front, .laminate .back {
       background: repeating-linear-gradient(0deg, #38634d 0 6px, #416e56 6px 7px);
     }
-    .copper .top { background: linear-gradient(120deg, #c57d50, #edb98d 48%, #d58c5b); }
+    .circuit-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+    .board-detail, .circuit { display: block; width: 100%; height: 100%; }
+    .board-detail { color: #d9eee0; }
+    .copper .top {
+      background: linear-gradient(120deg, #b96b40, #d99a68 48%, #be7348);
+      color: #ffe1b3;
+    }
+    .copper .top .circuit { filter: drop-shadow(0 1px 0 #9e5835); }
     .shadow {
       position: absolute; inset: -24px; background: rgb(39 71 51 / 14%);
       filter: blur(18px); transform: translateZ(-48px); border-radius: 30px;
@@ -79,6 +86,41 @@
   </style>
 </head>
 <body>
+  <svg class="circuit-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <defs>
+      <!-- Etched foil artwork is shared by both faces of the copper layer. -->
+      <symbol id="pcb-circuit" viewBox="0 0 260 156">
+        <g fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M108 63H90L67 28H32V18 M108 74H73L54 54H23 M108 86H59L43 104H22 M108 98H87L64 137H30" />
+          <path d="M152 63H169L190 28H226V18 M152 74H188L208 54H237 M152 86H201L218 104H238 M152 98H174L198 137H230" />
+          <path d="M119 56V38L103 22V15 M141 56V39L157 22V15 M119 100V119L103 135V143 M141 100V119L157 135V143" />
+          <circle cx="32" cy="18" r="6" /><circle cx="23" cy="54" r="6" />
+          <circle cx="22" cy="104" r="6" /><circle cx="30" cy="137" r="6" />
+          <circle cx="226" cy="18" r="6" /><circle cx="237" cy="54" r="6" />
+          <circle cx="238" cy="104" r="6" /><circle cx="230" cy="137" r="6" />
+        </g>
+        <g fill="currentColor">
+          <rect x="111" y="59" width="38" height="38" rx="3" />
+          <rect x="100" y="60" width="10" height="6" rx="1" />
+          <rect x="100" y="71" width="10" height="6" rx="1" />
+          <rect x="100" y="83" width="10" height="6" rx="1" />
+          <rect x="100" y="95" width="10" height="6" rx="1" />
+          <rect x="150" y="60" width="10" height="6" rx="1" />
+          <rect x="150" y="71" width="10" height="6" rx="1" />
+          <rect x="150" y="83" width="10" height="6" rx="1" />
+          <rect x="150" y="95" width="10" height="6" rx="1" />
+          <rect x="115" y="48" width="8" height="10" rx="1" />
+          <rect x="137" y="48" width="8" height="10" rx="1" />
+          <rect x="115" y="98" width="8" height="10" rx="1" />
+          <rect x="137" y="98" width="8" height="10" rx="1" />
+          <rect x="99" y="10" width="8" height="10" rx="1" />
+          <rect x="153" y="10" width="8" height="10" rx="1" />
+          <rect x="99" y="138" width="8" height="10" rx="1" />
+          <rect x="153" y="138" width="8" height="10" rx="1" />
+        </g>
+      </symbol>
+    </defs>
+  </svg>
   <section class="viewer" data-mode="rest" aria-label="Interactive PCB layer illustration">
     <h2>A look at the copper–laminate interface</h2>
     <p class="intro">Choose Moisture, Heat or both. Click an active option to remove it.</p>
@@ -87,16 +129,28 @@
       <button type="button" data-exposure="heat" aria-pressed="false">Heat</button>
       <button type="button" id="reset" aria-label="Reset layers to their original size">Reset</button>
     </div>
-    <div class="scene" role="img" aria-label="A thin copper foil above a thicker green laminate, shown in 3D">
+    <div class="scene" role="img" aria-label="A continuous copper foil with an illustrative circuit pattern above a green laminate, shown in 3D">
       <div class="stack">
         <div class="shadow"></div>
         <div class="layer laminate">
-          <div class="face top"></div><div class="face bottom"></div>
+          <div class="face top">
+            <svg class="board-detail" viewBox="0 0 260 156" aria-hidden="true">
+              <g fill="none" stroke="currentColor" stroke-width="1" opacity=".45">
+                <rect x="6" y="6" width="248" height="144" rx="4" />
+                <rect x="98" y="46" width="64" height="64" rx="3" />
+                <path d="M94 46h-5v8 M166 110h5v-8" />
+              </g>
+              <text x="74" y="149" fill="currentColor" font-size="6" letter-spacing="1" opacity=".65">PCB 01</text>
+            </svg>
+          </div><div class="face bottom"></div>
           <div class="face front"></div><div class="face back"></div>
           <div class="face left"></div><div class="face right"></div>
         </div>
         <div class="layer copper">
-          <div class="face top"></div><div class="face bottom"></div>
+          <div class="face top">
+            <svg class="circuit" viewBox="0 0 260 156" aria-hidden="true"><use href="#pcb-circuit" /></svg>
+          </div>
+          <div class="face bottom"></div>
           <div class="face front"></div><div class="face back"></div>
           <div class="face left"></div><div class="face right"></div>
         </div>
@@ -108,7 +162,8 @@
     </div>
     <p id="status" role="status" aria-live="polite">Original dimensions, without the effect of moisture or heat.</p>
     <p class="note">Schematic of free expansion, exaggerated for visibility. Layers are separated for clarity.
-      Heat illustrates copper expanding more than a lower-CTE laminate; actual behaviour depends on material and direction.</p>
+      The circuit pattern is illustrative. Heat illustrates copper expanding more than a lower-CTE laminate;
+      actual behaviour depends on material and direction.</p>
   </section>
   <script>
     const viewer = document.querySelector('.viewer');
