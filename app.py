@@ -1,8 +1,6 @@
 import streamlit as st
 import json
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from pathlib import Path
 from sensitivity_view import render_sensitivity
@@ -79,6 +77,33 @@ def run_analytical_stress_pipeline(D, Csat, h, t, beta, alpha_lam, alpha_cu, del
         "sigma_thermal": sigma_thermal,
         "sigma_index": sigma_index
     }
+
+def interpret_stress_contributions(hygroscopic, thermal):
+    """Describe signed contributions using their magnitudes to determine dominance."""
+    if hygroscopic == 0 and thermal == 0:
+        return "Neither contribution is active", "Both contributions are zero, so the net stress index is zero."
+    if hygroscopic == 0:
+        return "Thermal contribution dominates", "There is no hygroscopic contribution at these inputs. The net stress index equals the thermal contribution."
+    if thermal == 0:
+        return "Hygroscopic contribution dominates", "There is no thermal mismatch contribution at these inputs. The net stress index equals the hygroscopic contribution."
+
+    balanced = np.isclose(abs(hygroscopic), abs(thermal), rtol=1e-6, atol=1e-12)
+    opposing = np.sign(hygroscopic) != np.sign(thermal)
+    if balanced:
+        headline = "Contributions have equal magnitude"
+        effect = ("The contributions have opposite signs and nearly cancel, giving a near-zero net stress index."
+                  if opposing else
+                  "The contributions have the same sign and reinforce each other, increasing the magnitude of the net stress index.")
+    else:
+        dominant = "Hygroscopic" if abs(hygroscopic) > abs(thermal) else "Thermal"
+        smaller = "Thermal mismatch" if dominant == "Hygroscopic" else "Moisture swelling"
+        headline = f"{dominant} contribution dominates"
+        effect = (f"The contributions have opposite signs. {smaller} offsets part of the larger contribution, "
+                  "reducing the magnitude of the net stress index. The net index keeps the sign of the larger contribution."
+                  if opposing else
+                  "The contributions have the same sign and reinforce each other, increasing the magnitude of the net stress index.")
+    return headline, effect
+
 
 def render_3d_deformation(eps_h, eps_t, eps_net, n_frames=20):
     """Generates an interactive animated 3D visual with a Play/Pause button."""
@@ -236,6 +261,28 @@ def render_style():
     .st-key-simulation_scenario .scenario-property-heading {
         font-size: 1.1rem; font-weight: 650; padding: 0; margin: .5rem 0 .4rem; }
     [data-testid="stMetricValue"] { font-size: 1.8rem; }
+    .st-key-simulation_results [data-testid="stColumn"] {
+        position: relative; overflow: hidden; border-radius: 1rem;
+        box-shadow: 0 3px 12px rgba(35,65,54,.045); }
+    .st-key-simulation_results [data-testid="stColumn"]::before {
+        content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px; }
+    .st-key-simulation_results [data-testid="stColumn"]:has(.st-key-result_saturation),
+    .st-key-simulation_results [data-testid="stColumn"]:has(.st-key-result_hygroscopic) {
+        background: linear-gradient(135deg, rgba(54,133,117,.12), rgba(54,133,117,.035)); }
+    .st-key-simulation_results [data-testid="stColumn"]:has(.st-key-result_saturation)::before,
+    .st-key-simulation_results [data-testid="stColumn"]:has(.st-key-result_hygroscopic)::before {
+        background: #368575; }
+    .st-key-result_saturation [data-testid="stMetricValue"],
+    .st-key-result_hygroscopic [data-testid="stMetricValue"] { color: #368575; }
+    .st-key-simulation_results [data-testid="stColumn"]:has(.st-key-result_thermal) {
+        background: linear-gradient(135deg, rgba(200,125,85,.14), rgba(200,125,85,.035)); }
+    .st-key-simulation_results [data-testid="stColumn"]:has(.st-key-result_thermal)::before {
+        background: #c87d55; }
+    .st-key-result_thermal [data-testid="stMetricValue"] { color: #a56641; }
+    .st-key-simulation_results [data-testid="stColumn"]:has(.st-key-result_net) {
+        background: linear-gradient(120deg, rgba(54,133,117,.12), rgba(200,125,85,.14)); }
+    .st-key-simulation_results [data-testid="stColumn"]:has(.st-key-result_net)::before {
+        background: linear-gradient(90deg, #368575, #c87d55); }
     @media (max-width: 760px) {
         .block-container { padding-top: 1rem; }
         .st-key-main_navigation button { padding: .6rem .5rem; }
@@ -537,87 +584,53 @@ def render_simulation():
 
     st.caption(f"Active Scenario: **{st.session_state['preset_selector']}** | Exposure: **{t_hours:.1f} h** | Thickness: **{h_mm:.2f} mm**")
 
-    # Top KPI Metric Cards
-    col1, col2, col3, col4 = st.columns(4)
-    col1, col2, col3, col4 = [column.container(border=True) for column in (col1, col2, col3, col4)]
-    col1.metric("Moisture Saturation", f"{res['Mt_Minf'] * 100:.2f} %")
-    col1.caption("Fractional equilibrium uptake (Mt/M∞) achieved under 1D Fickian diffusion at the current exposure duration.")
-    col2.metric("Hygroscopic Strain (ε_h)", f"{res['eps_h']:.2e}")
-    col2.caption("Moisture-driven in-plane swelling strain (ε_h = β·W). Positive indicates matrix dilatation from absorbed water.")
-    col3.metric("Thermal Strain (ε_T)", f"{res['eps_t']:.2e}")
-    col3.caption("Unconstrained differential thermal strain: (α_lam − α_Cu)ΔT. Negative indicates copper expands more during heating.")
-    col4.metric("Net Stress Index (σ_index)", f"{res['sigma_index']:.2f} MPa")
-    col4.caption("Constrained equibiaxial stress [E/(1−ν)]·(ε_h + ε_T). Positive denotes in-plane tension; negative denotes compression.")
+    # Equal-height result cards share the moisture and thermal palette.
+    with st.container(key="simulation_results"):
+        columns = st.columns(4, border=True)
+        keys = ("result_saturation", "result_hygroscopic", "result_thermal", "result_net")
+        col1, col2, col3, col4 = [column.container(border=False, key=key)
+                                for column, key in zip(columns, keys)]
+        col1.metric("Moisture Saturation", f"{res['Mt_Minf'] * 100:.2f} %")
+        col1.caption("Fractional equilibrium uptake (Mt/M∞) achieved under 1D Fickian diffusion at the current exposure duration.")
+        col2.metric("Hygroscopic Strain", f"{res['eps_h']:.2e}")
+        col2.caption("Moisture-driven in-plane swelling strain: positive indicates matrix dilatation from absorbed water.")
+        col3.metric("Thermal Strain", f"{res['eps_t']:.2e}")
+        col3.caption("Unconstrained differential thermal strain: negative indicates copper expands more during heating.")
+        col4.metric("Net Stress Index", f"{res['sigma_index']:.2f} MPa")
+        col4.caption("Constrained equibiaxial stress: positive denotes in-plane tension; negative denotes compression.")
 
-    st.markdown("---")
+    st.write("")
+    chart, commentary = st.columns([1.1, 0.9], gap="large")
+    with chart:
+        st.subheader("Stress Contributions and Net Index")
+        values = [res["sigma_hygro"], res["sigma_thermal"], res["sigma_index"]]
+        figure = go.Figure(go.Bar(
+            x=["Hygroscopic", "Thermal", "Net Stress Index"], y=values,
+            marker_color=["#368575", "#c87d55", "#7f8165"],
+            text=[f"{value:+.2f} MPa" for value in values], textposition="auto",
+            hovertemplate="%{x}<br>%{y:+.4f} MPa<extra></extra>",
+        ))
+        figure.update_layout(
+            height=350, margin=dict(l=10, r=10, t=15, b=10), bargap=0.5,
+            showlegend=False,
+            yaxis=dict(title="Stress-index value (MPa)", zeroline=True,
+                       zerolinecolor="#78988e", zerolinewidth=1.5),
+        )
+        st.plotly_chart(figure, width="stretch", key="stress_contributions_chart")
 
-    # Delamination Risk Assessment Card
-    sigma_val = res["sigma_index"]
-    screening_magnitude_mpa = 15.0  # Illustrative only; calibrate against interface tests.
-    if abs(sigma_val) <= screening_magnitude_mpa:
-        mismatch_direction = "positive" if sigma_val > 0 else "negative" if sigma_val < 0 else "zero"
-        st.info(
-            f"**Low mismatch index on an illustrative scale: {sigma_val:.2f} MPa**  \n"
-            f"The net in-plane mismatch is {mismatch_direction}. This result alone cannot establish "
-            "whether the copper-laminate interface is safe from delamination."
-        )
-    elif sigma_val < 0:
-        st.warning(
-            f"**Elevated negative mismatch index: {sigma_val:.2f} MPa**  \n"
-            "The laminate's predicted free in-plane strain is less than copper's. "
-            "Assess actual stresses, buckling, and interfacial adhesion for the geometry and exposure."
-        )
-    else:
-        st.error(
-            f"**Elevated positive mismatch index: {sigma_val:.2f} MPa**  \n"
-            "The laminate's predicted free in-plane strain exceeds copper's. "
-            "Assess local edge opening and shear against measured adhesion under the expected conditions."
-        )
+    with commentary:
+        st.subheader("Results")
+        with st.container(border=True):
+            headline, effect = interpret_stress_contributions(res["sigma_hygro"], res["sigma_thermal"])
+            st.markdown(f"**{headline}**")
+            st.write(f"Hygroscopic contribution: **{res['sigma_hygro']:+.2f} MPa**  \n"
+                     f"Thermal contribution: **{res['sigma_thermal']:+.2f} MPa**")
+            st.write(effect)
+            st.markdown(f"The resulting net stress index is **{res['sigma_index']:+.2f} MPa**.")
     st.caption(
-        "The ±15 MPa screening band is illustrative, not a validated delamination limit. "
-        "The index sign does not identify the actual stress in either material or the peel traction; "
-        "qualify safety with geometry-specific "
-        "buckling or fracture analysis and adhesion tests, including moisture and thermal exposure."
+        "The calculated stress index is an indicator. Assessing delamination risk requires "
+        "physical measurements, including interface adhesion tests under the relevant exposure conditions."
     )
-
-    st.markdown("---")
-
-    # Main Content Layout: Step-by-Step Breakdown vs. Visual Stress Contribution
-    left_col, right_col = st.columns([1.1, 0.9])
-
-    with left_col:
-        st.subheader("Deterministic Pipeline Breakdown")
-        st.caption("Intermediate physical values calculated sequentially across the 5 equations:")
-    
-        breakdown_df = pd.DataFrame([
-            {"Step": "1. Fickian Mass Ratio (Mt/Minf)", "Value": f"{res['Mt_Minf']:.4f}", "Unit": "dimensionless"},
-            {"Step": "2. Absorbed Moisture Density (W_t)", "Value": f"{res['W_t']:.4f}", "Unit": "kg/m³"},
-            {"Step": "3. Hygroscopic Swelling Strain (ε_h)", "Value": f"{res['eps_h']:.6f}", "Unit": "dimensionless"},
-            {"Step": "4. Thermal Mismatch Strain (ε_T)", "Value": f"{res['eps_t']:.6f}", "Unit": "dimensionless"},
-            {"Step": "5. Net In-Plane Mismatch Strain", "Value": f"{res['eps_net']:.6f}", "Unit": "dimensionless"},
-            {"Step": "6. Biaxial Modulus [E / (1 - ν)]", "Value": f"{res['biaxial_modulus']:.1f}", "Unit": "MPa"},
-            {"Step": "7. Final Net Stress Index (σ_index)", "Value": f"{res['sigma_index']:.3f}", "Unit": "MPa"}
-        ])
-        st.table(breakdown_df)
-
-    with right_col:
-        st.subheader("Stress Component Decomposition")
-        st.caption("Visualizing the competing effects of moisture swelling vs. thermal mismatch:")
-    
-        fig, ax = plt.subplots(figsize=(6, 3.8))
-        components = ['Hygroscopic Contribution', 'Thermal Mismatch', 'Net Stress Index']
-        values = [res['sigma_hygro'], res['sigma_thermal'], res['sigma_index']]
-        net_color = '#4c78a8' if abs(sigma_val) <= screening_magnitude_mpa else '#e6a23c' if sigma_val < 0 else '#d9534f'
-        colors = ['#d95f02', '#7570b3', net_color]
-    
-        ax.bar(components, values, color=colors, width=0.5)
-        ax.axhline(0, color='black', linewidth=0.8, linestyle='--')
-        ax.set_ylabel("Stress Contribution (MPa)")
-        plt.xticks(rotation=15, ha='right')
-        ax.grid(axis='y', linestyle=':', alpha=0.6)
-    
-        st.pyplot(fig)
-        plt.close(fig)
 
     # -----------------------------------------------------------------------------
     # 3D Hygrothermal Deformation Visualizer
