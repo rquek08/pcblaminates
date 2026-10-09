@@ -1,0 +1,465 @@
+{
+  "source_workbook": "Formula_sheet_V2.xlsx",
+  "presets": [
+    {
+      "name": "Isola 370HR — 85°C/85%RH",
+      "supplier": "Isola",
+      "grade": "370HR",
+      "material_class": "PCB laminate",
+      "condition": "85°C/85%RH",
+      "source_rows": {
+        "Moisture": 15,
+        "Thermal": 15
+      },
+      "properties": {
+        "E": 25814.0,
+        "nu": 0.177,
+        "alpha_lam": 13.0,
+        "D": 1.65e-12,
+        "Csat": 166.53,
+        "beta": 0.000115,
+        "h_mm": 1.6,
+        "delta_T": 60.0,
+        "t_hours": 24.0,
+        "alpha_cu": 16.5
+      }
+    },
+    {
+      "name": "Isola 370HR — 60°C/60%RH",
+      "supplier": "Isola",
+      "grade": "370HR",
+      "material_class": "PCB laminate",
+      "condition": "60°C/60%RH",
+      "source_rows": {
+        "Moisture": 16,
+        "Thermal": 16
+      },
+      "properties": {
+        "E": 25814.0,
+        "nu": 0.177,
+        "alpha_lam": 13.0,
+        "D": 6.38e-13,
+        "Csat": 117.68,
+        "beta": 0.000115,
+        "h_mm": 1.6,
+        "delta_T": 35.0,
+        "t_hours": 24.0,
+        "alpha_cu": 16.5
+      }
+    },
+    {
+      "name": "Isola G200 — 85°C/85%RH",
+      "supplier": "Isola",
+      "grade": "G200",
+      "material_class": "PCB laminate",
+      "condition": "85°C/85%RH",
+      "source_rows": {
+        "Moisture": 17,
+        "Thermal": 17
+      },
+      "properties": {
+        "E": 24056.0,
+        "nu": 0.182,
+        "alpha_lam": 13.0,
+        "D": 2.1e-12,
+        "Csat": 222.04,
+        "beta": 0.00014,
+        "h_mm": 1.6,
+        "delta_T": 60.0,
+        "t_hours": 24.0,
+        "alpha_cu": 16.5
+      }
+    },
+    {
+      "name": "Isola G200 — 60°C/60%RH",
+      "supplier": "Isola",
+      "grade": "G200",
+      "material_class": "PCB laminate",
+      "condition": "60°C/60%RH",
+      "source_rows": {
+        "Moisture": 18,
+        "Thermal": 18
+      },
+      "properties": {
+        "E": 24056.0,
+        "nu": 0.182,
+        "alpha_lam": 13.0,
+        "D": 8.15e-13,
+        "Csat": 156.54,
+        "beta": 0.00014,
+        "h_mm": 1.6,
+        "delta_T": 35.0,
+        "t_hours": 24.0,
+        "alpha_cu": 16.5
+      }
+    },
+    {
+      "name": "Isola IS410 — 85°C/85%RH",
+      "supplier": "Isola",
+      "grade": "IS410",
+      "material_class": "PCB laminate",
+      "condition": "85°C/85%RH",
+      "source_rows": {
+        "Moisture": 19,
+        "Thermal": 19
+      },
+      "properties": {
+        "E": 25352.0,
+        "nu": 0.175,
+        "alpha_lam": 11.0,
+        "D": 1.85e-12,
+        "Csat": 222.04,
+        "beta": 0.00013,
+        "h_mm": 1.6,
+        "delta_T": 60.0,
+        "t_hours": 24.0,
+        "alpha_cu": 16.5
+      }
+    },
+    {
+      "name": "Isola IS410 — 60°C/60%RH",
+      "supplier": "Isola",
+      "grade": "IS410",
+      "material_class": "PCB laminate",
+      "condition": "60°C/60%RH",
+      "source_rows": {
+        "Moisture": 20,
+        "Thermal": 20
+      },
+      "properties": {
+        "E": 25352.0,
+        "nu": 0.175,
+        "alpha_lam": 11.0,
+        "D": 7.1e-13,
+        "Csat": 156.54,
+        "beta": 0.00013,
+        "h_mm": 1.6,
+        "delta_T": 35.0,
+        "t_hours": 24.0,
+        "alpha_cu": 16.5
+      }
+    },
+    {
+      "name": "Panasonic MEGTRON 6 / R-5775 — 85°C/85%RH",
+      "supplier": "Panasonic",
+      "grade": "MEGTRON 6 / R-5775",
+      "material_class": "PCB laminate",
+      "condition": "85°C/85%RH",
+      "source_rows": {
+        "Moisture": 27,
+        "Thermal": 27
+      },
+      "properties": {
+        "E": 24500.0,
+        "nu": 0.18,
+        "alpha_lam": 12.0,
+        "D": 6.2e-13,
+        "Csat": 390.0,
+        "beta": 0.00023,
+        "h_mm": 1.6,
+        "delta_T": 60.0,
+        "t_hours": 24.0,
+        "alpha_cu": 16.5
+      }
+    },
+    {
+      "name": "Panasonic MEGTRON 6 / R-5775 — 60°C/60%RH",
+      "supplier": "Panasonic",
+      "grade": "MEGTRON 6 / R-5775",
+      "material_class": "PCB laminate",
+      "condition": "60°C/60%RH",
+      "source_rows": {
+        "Moisture": 28,
+        "Thermal": 28
+      },
+      "properties": {
+        "E": 24500.0,
+        "nu": 0.18,
+        "alpha_lam": 12.0,
+        "D": 1.8e-13,
+        "Csat": 275.0,
+        "beta": 0.00023,
+        "h_mm": 1.6,
+        "delta_T": 35.0,
+        "t_hours": 24.0,
+        "alpha_cu": 16.5
+      }
+    },
+    {
+      "name": "Panasonic R-1515E — 85°C/85%RH",
+      "supplier": "Panasonic",
+      "grade": "R-1515E",
+      "material_class": "Package substrate laminate/core",
+      "condition": "85°C/85%RH",
+      "source_rows": {
+        "Moisture": 25,
+        "Thermal": 25
+      },
+      "properties": {
+        "E": 29000.0,
+        "nu": 0.2,
+        "alpha_lam": 8.5,
+        "D": 4.5e-13,
+        "Csat": 450.0,
+        "beta": 0.00021,
+        "h_mm": 1.6,
+        "delta_T": 60.0,
+        "t_hours": 24.0,
+        "alpha_cu": 16.5
+      }
+    },
+    {
+      "name": "Panasonic R-1515E — 60°C/60%RH",
+      "supplier": "Panasonic",
+      "grade": "R-1515E",
+      "material_class": "Package substrate laminate/core",
+      "condition": "60°C/60%RH",
+      "source_rows": {
+        "Moisture": 26,
+        "Thermal": 26
+      },
+      "properties": {
+        "E": 29000.0,
+        "nu": 0.2,
+        "alpha_lam": 8.5,
+        "D": 1.3e-13,
+        "Csat": 315.0,
+        "beta": 0.00021,
+        "h_mm": 1.6,
+        "delta_T": 35.0,
+        "t_hours": 24.0,
+        "alpha_cu": 16.5
+      }
+    },
+    {
+      "name": "Shengyi S1000-2 — 85°C/85%RH",
+      "supplier": "Shengyi",
+      "grade": "S1000-2",
+      "material_class": "PCB laminate",
+      "condition": "85°C/85%RH",
+      "source_rows": {
+        "Moisture": 31,
+        "Thermal": 31
+      },
+      "properties": {
+        "E": 26000.0,
+        "nu": 0.19,
+        "alpha_lam": 13.0,
+        "D": 2.45e-13,
+        "Csat": 510.0,
+        "beta": 0.00028,
+        "h_mm": 1.6,
+        "delta_T": 60.0,
+        "t_hours": 24.0,
+        "alpha_cu": 16.5
+      }
+    },
+    {
+      "name": "Shengyi S1000-2 — 60°C/60%RH",
+      "supplier": "Shengyi",
+      "grade": "S1000-2",
+      "material_class": "PCB laminate",
+      "condition": "60°C/60%RH",
+      "source_rows": {
+        "Moisture": 32,
+        "Thermal": 32
+      },
+      "properties": {
+        "E": 26000.0,
+        "nu": 0.19,
+        "alpha_lam": 13.0,
+        "D": 8.5e-13,
+        "Csat": 358.0,
+        "beta": 0.00028,
+        "h_mm": 1.6,
+        "delta_T": 35.0,
+        "t_hours": 24.0,
+        "alpha_cu": 16.5
+      }
+    },
+    {
+      "name": "Shengyi S1000-2M — 85°C/85%RH",
+      "supplier": "Shengyi",
+      "grade": "S1000-2M",
+      "material_class": "PCB laminate",
+      "condition": "85°C/85%RH",
+      "source_rows": {
+        "Moisture": 37,
+        "Thermal": 37
+      },
+      "properties": {
+        "E": 31000.0,
+        "nu": 0.21,
+        "alpha_lam": 9.0,
+        "D": 3.9e-13,
+        "Csat": 420.0,
+        "beta": 0.00022,
+        "h_mm": 1.6,
+        "delta_T": 60.0,
+        "t_hours": 24.0,
+        "alpha_cu": 16.5
+      }
+    },
+    {
+      "name": "Shengyi S1000-2M — 60°C/60%RH",
+      "supplier": "Shengyi",
+      "grade": "S1000-2M",
+      "material_class": "PCB laminate",
+      "condition": "60°C/60%RH",
+      "source_rows": {
+        "Moisture": 38,
+        "Thermal": 38
+      },
+      "properties": {
+        "E": 31000.0,
+        "nu": 0.21,
+        "alpha_lam": 9.0,
+        "D": 1.12e-13,
+        "Csat": 295.0,
+        "beta": 0.00022,
+        "h_mm": 1.6,
+        "delta_T": 35.0,
+        "t_hours": 24.0,
+        "alpha_cu": 16.5
+      }
+    },
+    {
+      "name": "Shengyi S1141 — 85°C/85%RH",
+      "supplier": "Shengyi",
+      "grade": "S1141",
+      "material_class": "PCB laminate",
+      "condition": "85°C/85%RH",
+      "source_rows": {
+        "Moisture": 33,
+        "Thermal": 33
+      },
+      "properties": {
+        "E": 22000.0,
+        "nu": 0.22,
+        "alpha_lam": 15.0,
+        "D": 1.65e-12,
+        "Csat": 574.0,
+        "beta": 0.00035,
+        "h_mm": 1.6,
+        "delta_T": 60.0,
+        "t_hours": 24.0,
+        "alpha_cu": 16.5
+      }
+    },
+    {
+      "name": "Shengyi S1141 — 60°C/60%RH",
+      "supplier": "Shengyi",
+      "grade": "S1141",
+      "material_class": "PCB laminate",
+      "condition": "60°C/60%RH",
+      "source_rows": {
+        "Moisture": 34,
+        "Thermal": 34
+      },
+      "properties": {
+        "E": 22000.0,
+        "nu": 0.22,
+        "alpha_lam": 15.0,
+        "D": 4.7e-13,
+        "Csat": 400.0,
+        "beta": 0.00035,
+        "h_mm": 1.6,
+        "delta_T": 35.0,
+        "t_hours": 24.0,
+        "alpha_cu": 16.5
+      }
+    },
+    {
+      "name": "Shengyi S7439 — 85°C/85%RH",
+      "supplier": "Shengyi",
+      "grade": "S7439",
+      "material_class": "PCB laminate",
+      "condition": "85°C/85%RH",
+      "source_rows": {
+        "Moisture": 35,
+        "Thermal": 35
+      },
+      "properties": {
+        "E": 28500.0,
+        "nu": 0.17,
+        "alpha_lam": 10.0,
+        "D": 5.1e-13,
+        "Csat": 360.0,
+        "beta": 0.00024,
+        "h_mm": 1.6,
+        "delta_T": 60.0,
+        "t_hours": 24.0,
+        "alpha_cu": 16.5
+      }
+    },
+    {
+      "name": "Shengyi S7439 — 60°C/60%RH",
+      "supplier": "Shengyi",
+      "grade": "S7439",
+      "material_class": "PCB laminate",
+      "condition": "60°C/60%RH",
+      "source_rows": {
+        "Moisture": 36,
+        "Thermal": 36
+      },
+      "properties": {
+        "E": 28500.0,
+        "nu": 0.17,
+        "alpha_lam": 10.0,
+        "D": 1.48e-13,
+        "Csat": 250.0,
+        "beta": 0.00024,
+        "h_mm": 1.6,
+        "delta_T": 35.0,
+        "t_hours": 24.0,
+        "alpha_cu": 16.5
+      }
+    },
+    {
+      "name": "Shengyi SI10US/SI13U — 85°C/85%RH",
+      "supplier": "Shengyi",
+      "grade": "SI10US/SI13U",
+      "material_class": "Package substrate laminate/core",
+      "condition": "85°C/85%RH",
+      "source_rows": {
+        "Moisture": 7,
+        "Thermal": 7
+      },
+      "properties": {
+        "E": 28000.0,
+        "nu": 0.2,
+        "alpha_lam": 10.0,
+        "D": 8.8e-14,
+        "Csat": 110.0,
+        "beta": 0.00012,
+        "h_mm": 1.6,
+        "delta_T": 60.0,
+        "t_hours": 24.0,
+        "alpha_cu": 16.5
+      }
+    },
+    {
+      "name": "Shengyi SI10US/SI13U — 60°C/60%RH",
+      "supplier": "Shengyi",
+      "grade": "SI10US/SI13U",
+      "material_class": "Package substrate laminate/core",
+      "condition": "60°C/60%RH",
+      "source_rows": {
+        "Moisture": 8,
+        "Thermal": 8
+      },
+      "properties": {
+        "E": 28000.0,
+        "nu": 0.2,
+        "alpha_lam": 10.0,
+        "D": 2.15e-14,
+        "Csat": 92.5,
+        "beta": 0.00012,
+        "h_mm": 1.6,
+        "delta_T": 35.0,
+        "t_hours": 24.0,
+        "alpha_cu": 16.5
+      }
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 import streamlit as st
+import json
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -11,32 +12,25 @@ from sensitivity_view import render_sensitivity
 # -----------------------------------------------------------------------------
 MOLAR_MASS_WATER = 0.018015  # kg/mol
 
-# Verified Material Presets (using industry baseline 1.6 mm for rigid cores)
-PRESETS = {
-    "Isola 370HR (High-Tg Core)": {
-        "E": 25814.0, "nu": 0.177, "alpha_lam": 13.0,
-        "D": 1.65e-12, "Csat": 166.53, "beta": 1.15e-4, "h_mm": 1.6
-    },
-    "Isola G200 (BT-Epoxy System)": {
-        "E": 24056.0, "nu": 0.182, "alpha_lam": 13.0,
-        "D": 2.10e-12, "Csat": 222.04, "beta": 1.40e-4, "h_mm": 1.6
-    },
-    "Isola IS410 (Lead-Free FR-4)": {
-        "E": 25352.0, "nu": 0.175, "alpha_lam": 11.0,
-        "D": 1.85e-12, "Csat": 222.04, "beta": 1.30e-4, "h_mm": 1.6
-    },
-    "Shengyi SI10US (Halogen-Free CCL)": {
-        "E": 24000.0, "nu": 0.200, "alpha_lam": 10.0,
-        "D": 8.80e-14, "Csat": 110.00, "beta": 1.20e-4, "h_mm": 1.6
-    },
-    "Mitsubishi BT Substrate": {
-        "E": 27000.0, "nu": 0.180, "alpha_lam": 10.0,
-        "D": 1.65e-12, "Csat": 574.00, "beta": 3.80e-5, "h_mm": 1.6
-    },
+# Condition-specific laminate inputs extracted from Formula_sheet_V2.xlsx.
+# Store the inputs locally so running the app does not require the source workbook.
+MATERIAL_LIBRARY = json.loads(
+    (Path(__file__).parent / "material_presets.json").read_text(encoding="utf-8")
+)
+PRESET_METADATA = {record["name"]: record for record in MATERIAL_LIBRARY["presets"]}
+PRESETS = {name: record["properties"] for name, record in PRESET_METADATA.items()}
+PRESETS.update({
+    # Custom entry option
     "Custom / Manual Entry": {
         "E": 25000.0, "nu": 0.200, "alpha_lam": 12.0,
         "D": 1.00e-12, "Csat": 150.00, "beta": 1.00e-4, "h_mm": 1.6
     }
+})
+LEGACY_PRESET_NAMES = {
+    "Isola 370HR (High-Tg Core)": "Isola 370HR — 85°C/85%RH",
+    "Isola G200 (BT-Epoxy System)": "Isola G200 — 85°C/85%RH",
+    "Isola IS410 (Lead-Free FR-4)": "Isola IS410 — 85°C/85%RH",
+    "Shengyi SI10US (Halogen-Free CCL)": "Shengyi SI10US/SI13U — 85°C/85%RH",
 }
 
 # -----------------------------------------------------------------------------
@@ -231,6 +225,8 @@ def render_style():
         width: 48px; height: 48px; margin-bottom: .5rem; border-radius: 12px;
         background: rgba(54,133,117,.1); color: #368575; }
     .exploration-icon svg { width: 28px; height: 28px; }
+    .st-key-stress_analyser_header .exploration-icon { margin-bottom: 0; }
+    .st-key-stress_analyser_header h1 { padding: 0; }
     [data-testid="stMetricValue"] { font-size: 1.8rem; }
     @media (max-width: 760px) {
         .block-container { padding-top: 1rem; }
@@ -343,6 +339,12 @@ def render_home_stress_flow():
         st.caption("The stiffness factor Eeff/(1 − νeff) represents an effective linear-elastic, equibiaxial in-plane constraint.")
 
 
+STRESS_ANALYSER_ICON = (
+    '<path d="m12 3 10 5-10 5L2 8 12 3Z" />'
+    '<path d="m2 12 10 5 10-5M2 16l10 5 10-5" />'
+)
+
+
 def render_exploration_icon(shapes):
     st.markdown(
         '<div class="exploration-icon" aria-hidden="true">'
@@ -350,6 +352,7 @@ def render_exploration_icon(shapes):
         'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
         f'{shapes}</svg></div>',
         unsafe_allow_html=True,
+        width="content",
     )
 
 
@@ -388,10 +391,7 @@ def render_home():
     simulation, sensitivity, inverse = st.columns(3, gap="medium", border=True)
     with simulation:
         with st.container(border=False, height="stretch", key="home_simulation_card"):
-            render_exploration_icon(
-                '<path d="m12 3 10 5-10 5L2 8 12 3Z" />'
-                '<path d="m2 12 10 5 10-5M2 16l10 5 10-5" />'
-            )
+            render_exploration_icon(STRESS_ANALYSER_ICON)
             st.caption("01 · STRESS ANALYSER")
             st.markdown("#### Follow the physics")
             st.write("Input properties of your chosen laminate and its exposure conditions. Calculate moisture uptake, "
@@ -436,18 +436,30 @@ def render_simulation_inputs():
     saved = st.session_state.get("simulation_inputs", defaults)
     for key, value in saved.items():
         st.session_state.setdefault(key, value)
+    selected = st.session_state["preset_selector"]
+    if selected not in PRESETS:
+        # Preserve existing input edits when a saved preset name has changed.
+        st.session_state["preset_selector"] = LEGACY_PRESET_NAMES.get(selected, "Custom / Manual Entry")
 
-    st.title("Stress Analyser")
+    with st.container(horizontal=True, wrap=False, vertical_alignment="center",
+                      gap="small", key="stress_analyser_header"):
+        render_exploration_icon(STRESS_ANALYSER_ICON)
+        st.title("Stress Analyser")
     st.caption("Choose your material and exposure conditions, then follow the calculation from uptake to stress.")
     with st.container(border=True):
         preset, detail = st.columns([1.25, 2])
         with preset:
             st.selectbox("Select Material Preset", list(PRESETS), key="preset_selector",
                          on_change=load_preset_values,
-                         help="Loads the mechanical, moisture, and thickness fields below. All remain editable.")
+                         help="Workbook presets load material properties, thickness, soak time, "
+                              "temperature change and copper CTE for the named condition. All remain editable.")
         with detail:
             st.markdown("**Your simulation scenario**")
             st.caption("Start with a preset or enter your own properties. Results update as you change an input.")
+            metadata = PRESET_METADATA.get(st.session_state["preset_selector"])
+            if metadata:
+                st.caption(f"Workbook reference: {metadata['material_class']} · {metadata['condition']}. "
+                           "Moisture properties correspond to this conditioning environment.")
 
         st.markdown("#### Exposure & geometry")
         temperature, duration, thickness, copper = st.columns(4)
