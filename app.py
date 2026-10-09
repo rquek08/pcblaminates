@@ -385,7 +385,6 @@ def render_home():
 
     st.write("")
     st.subheader("Laminate Stress Explorer")
-    st.caption("Evaluate stress simulations, parameter sensitivity, and inverse exploration.")
     simulation, sensitivity, inverse = st.columns(3, gap="medium", border=True)
     with simulation:
         with st.container(border=False, height="stretch", key="home_simulation_card"):
