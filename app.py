@@ -269,9 +269,11 @@ def render_style():
         background: rgba(54,133,117,.1); color: #368575; }
     .exploration-icon svg { width: 28px; height: 28px; }
     .st-key-stress_analyser_header .exploration-icon,
-    .st-key-sensitivity_analysis_header .exploration-icon { margin-bottom: 0; }
+    .st-key-sensitivity_analysis_header .exploration-icon,
+    .st-key-inverse_exploration_header .exploration-icon { margin-bottom: 0; }
     .st-key-stress_analyser_header h1,
-    .st-key-sensitivity_analysis_header h1 { padding: 0; }
+    .st-key-sensitivity_analysis_header h1,
+    .st-key-inverse_exploration_header h1 { padding: 0; }
     .st-key-simulation_scenario .scenario-title {
         font-size: 2rem; font-weight: 700; padding: 0; margin: 0 0 .5rem; }
     .st-key-simulation_scenario .scenario-preset-heading {
@@ -419,6 +421,11 @@ STRESS_ANALYSER_ICON = (
     '<path d="m2 12 10 5 10-5M2 16l10 5 10-5" />'
 )
 SENSITIVITY_ANALYSIS_ICON = '<path d="M4 3v17h17M9 16V9M14 16V5M19 16v-4" />'
+INVERSE_EXPLORATION_ICON = (
+    '<circle cx="11" cy="13" r="9" />'
+    '<circle cx="11" cy="13" r="5" />'
+    '<path d="m11 13 9-9M16 4h4v4" />'
+)
 
 
 def render_exploration_icon(shapes):
@@ -483,11 +490,7 @@ def render_home():
         st.button("View section →", on_click=navigate, args=(NAVIGATION[1],), key="home_sensitivity")
     with inverse:
         with st.container(border=False, height="stretch", key="home_inverse_card"):
-            render_exploration_icon(
-                '<circle cx="11" cy="13" r="9" />'
-                '<circle cx="11" cy="13" r="5" />'
-                '<path d="m11 13 9-9M16 4h4v4" />'
-            )
+            render_exploration_icon(INVERSE_EXPLORATION_ICON)
             st.caption("03 · INVERSE EXPLORATION")
             st.markdown("#### Design for target response")
             st.write("Design a laminate to meet specific performance requirements. Start with a desired response and explore "
@@ -653,7 +656,10 @@ def render_simulation():
 
 
 def render_placeholder(section):
-    st.title(section)
+    with st.container(horizontal=True, wrap=False, vertical_alignment="center",
+                      gap="small", key="inverse_exploration_header"):
+        render_exploration_icon(INVERSE_EXPLORATION_ICON)
+        st.title(section)
     with st.container(border=True):
         st.markdown("### Coming next")
         st.write("This section is ready for the workflow and controls you specify next.")

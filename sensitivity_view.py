@@ -47,8 +47,7 @@ def render_sensitivity(simulation_scenario):
                                   key="sens_output", persist_state="session")
         p = reference_baseline(study) if baseline_source == "Default reference scenario" else dict(simulation_scenario)
         if baseline_source == "Default reference scenario":
-            st.caption("The default reference scenario is a built-in example, independent of the material preset: "
-                       "1.6 mm thickness, a 50 K temperature change and approximately 132.4 hours of exposure. "
+            st.caption("The default reference scenario is a built-in example."
                        "View or edit its unvaried properties under Fixed inputs for this study.")
         else:
             st.caption("Start from your most recent Stress Analyser inputs. "
@@ -156,7 +155,7 @@ def render_sensitivity(simulation_scenario):
 def render_results(result, config, signature):
     table = result["indices"].sort_values("ST", ascending=False)
     unit = OUTPUTS[config["target"]][1]
-    st.subheader("Which parameters matter most?")
+    st.subheader("Parameter Importance")
     first, total, interactions = st.columns(3)
     with first.container(border=True):
         st.markdown("**S1 · Main effect**")
@@ -185,32 +184,19 @@ def render_results(result, config, signature):
     st.info(f"Largest estimated total effect: **{top['Label']}** (ST ≈ {top['ST']:.3f}) for these ranges and fixed inputs.")
     st.caption("Error bars show paired bootstrap 95% intervals. Sampling noise can put estimates outside 0–1. "
                "Total effects overlap and should not be added as independent percentages.")
-    st.dataframe(table.drop(columns="Parameter"), hide_index=True, width="stretch")
-    st.caption(f"Largest change in ST between N/2 and N: {table['ST change'].max():.3f}. "
-               "Increase N or change the sampling seed to check uncertain rankings. This comparison does not guarantee convergence.")
+    with st.expander("Further information", expanded=False):
+        st.markdown("#### Detailed parameter indices")
+        st.dataframe(table.drop(columns="Parameter"), hide_index=True, width="stretch")
+        st.caption(f"Largest change in ST between N/2 and N: {table['ST change'].max():.3f}. "
+                   "Increase N or change the sampling seed to check uncertain rankings. This comparison does not guarantee convergence.")
 
-    with st.expander("Response and intermediate output summary"):
+        st.markdown("#### Response and intermediate output summary")
         st.dataframe(result["summary"], hide_index=True, width="stretch")
         st.caption(f"Statistics use the independent A and B base samples. Selected response units: {unit}.")
-    with st.expander("Sampled inputs and calculated outputs"):
+        st.markdown("#### Sampled inputs and calculated outputs")
         st.dataframe(result["samples"].head(500), hide_index=True, width="stretch")
         st.caption(f"Preview of the first 500 of {len(result['samples']):,} model evaluations. Downloads include all rows.")
-    st.markdown("#### Download the study")
-    indices, samples, settings = st.columns(3)
-    indices.download_button("Sobol indices (CSV)", table.to_csv(index=False).encode(), "sobol_indices.csv", "text/csv", key="sens_indices_download")
-    samples.download_button("All samples (CSV)", result["samples"].to_csv(index=False).encode(), "sobol_samples.csv", "text/csv", key="sens_samples_download")
-    settings.download_button("Study settings (JSON)", json.dumps(config, indent=2).encode(), "sobol_settings.json", "application/json", key="sens_settings_download")
-    if st.button("Prepare Excel workbook", key="sens_prepare_excel"):
-        try:
-            with st.spinner("Preparing workbook with settings, samples, and results…"):
-                st.session_state["sensitivity_excel"] = (signature, excel_report(result, config))
-        except ImportError:
-            st.error("Excel export requires openpyxl. CSV downloads are available above.")
-    workbook = st.session_state.get("sensitivity_excel")
-    if workbook and workbook[0] == signature:
-        st.download_button("Download Excel workbook", workbook[1], "sensitivity_study.xlsx",
-                           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key="sens_excel_download")
-    with st.expander("Model and method"):
+        st.markdown("#### Model and method")
         st.latex(r"\sigma_{\mathrm{index}}=\frac{E}{1-\nu}\left[\beta W(t)+(\alpha_{\mathrm{lam}}-\alpha_{\mathrm{Cu}})\Delta T\right]")
         st.write("The default response is the magnitude of this signed index. Uptake starts dry and uses "
                  "one-dimensional plane-sheet diffusion with both faces exposed. Moisture uptake is calculated "
@@ -220,3 +206,19 @@ def render_results(result, config, signature):
                  "The model calculates an indicator, not interface traction or delamination safety.")
         st.markdown("Scrambled Sobol sequence, Saltelli cross-sampling, centered first-order and Jansen "
                     "total-order estimators. [Method reference](https://salib.readthedocs.io/en/latest/_modules/SALib/analyze/sobol.html).")
+
+    with st.expander("Download the study", expanded=False):
+        indices, samples, settings = st.columns(3)
+        indices.download_button("Sobol indices (CSV)", table.to_csv(index=False).encode(), "sobol_indices.csv", "text/csv", key="sens_indices_download")
+        samples.download_button("All samples (CSV)", result["samples"].to_csv(index=False).encode(), "sobol_samples.csv", "text/csv", key="sens_samples_download")
+        settings.download_button("Study settings (JSON)", json.dumps(config, indent=2).encode(), "sobol_settings.json", "application/json", key="sens_settings_download")
+        if st.button("Prepare Excel workbook", key="sens_prepare_excel"):
+            try:
+                with st.spinner("Preparing workbook with settings, samples, and results…"):
+                    st.session_state["sensitivity_excel"] = (signature, excel_report(result, config))
+            except ImportError:
+                st.error("Excel export requires openpyxl. CSV downloads are available above.")
+        workbook = st.session_state.get("sensitivity_excel")
+        if workbook and workbook[0] == signature:
+            st.download_button("Download Excel workbook", workbook[1], "sensitivity_study.xlsx",
+                               "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key="sens_excel_download")
