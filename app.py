@@ -672,7 +672,7 @@ def main():
     render_style()
     brand, navigation = st.columns([1, 3], vertical_alignment="center")
     with brand:
-        st.button("◈ Copper–Laminate Interfaces", key="home_link", on_click=navigate,
+        st.button("◈ Bonded by Stress", key="home_link", on_click=navigate,
                   help="Return to the front page")
     with navigation:
         section = st.pills("Explore", NAVIGATION, key="main_navigation", required=True,
