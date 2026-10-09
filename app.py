@@ -1,9 +1,20 @@
 import streamlit as st
 import json
+import sys
+from importlib.util import module_from_spec, spec_from_file_location
 import numpy as np
 import plotly.graph_objects as go
 from pathlib import Path
-from sensitivity_view import render_sensitivity
+
+# Load both sensitivity files from this app's folder, including when older
+# copies from the parent folder are already in Python's module cache.
+for module_name, filename in (("sensitivity_analysis", "sensitivity_analysis.py"),
+                              ("_pcb_sensitivity_view", "sensitivity_view.py")):
+    sensitivity_spec = spec_from_file_location(module_name, Path(__file__).parent / filename)
+    sensitivity_module = module_from_spec(sensitivity_spec)
+    sys.modules[module_name] = sensitivity_module
+    sensitivity_spec.loader.exec_module(sensitivity_module)
+render_sensitivity = sys.modules["_pcb_sensitivity_view"].render_sensitivity
 
 # -----------------------------------------------------------------------------
 # Configuration & Constants
@@ -228,8 +239,15 @@ def render_style():
     }
     .st-key-main_navigation button:hover { background: rgba(54,133,117,.08); }
     .st-key-main_navigation button:focus-visible { outline: 2px solid #368575; }
-    [data-testid="stBaseButton-primary"] { background-color: #368575; border-color: #368575; }
-    [data-testid="stBaseButton-primary"]:hover { background-color: #2b6a5d; border-color: #2b6a5d; }
+    [data-testid^="stBaseButton-primary"] {
+        background-color: #368575; border-color: #368575; color: #fff; }
+    [data-testid^="stBaseButton-primary"]:hover {
+        background-color: #2b6a5d; border-color: #2b6a5d; color: #fff; }
+    [class*="st-key-sens_"] [data-testid="stBaseButton-secondary"] {
+        background: rgba(54,133,117,.08); border-color: #95bcb0; color: #368575; }
+    [class*="st-key-sens_"] [data-testid="stBaseButton-secondary"]:hover {
+        background: rgba(54,133,117,.16); border-color: #368575; }
+    [class*="st-key-sens_"] button:focus-visible { outline: 2px solid #368575; }
     .eyebrow { color: #368575; font-size: .78rem; font-weight: 650; letter-spacing: .16em; }
     .hero-title { font-size: clamp(2.25rem, 4vw, 3.8rem); line-height: 1.15;
         text-align: left; font-weight: 700; letter-spacing: -.035em;
@@ -250,8 +268,10 @@ def render_style():
         width: 48px; height: 48px; margin-bottom: .5rem; border-radius: 12px;
         background: rgba(54,133,117,.1); color: #368575; }
     .exploration-icon svg { width: 28px; height: 28px; }
-    .st-key-stress_analyser_header .exploration-icon { margin-bottom: 0; }
-    .st-key-stress_analyser_header h1 { padding: 0; }
+    .st-key-stress_analyser_header .exploration-icon,
+    .st-key-sensitivity_analysis_header .exploration-icon { margin-bottom: 0; }
+    .st-key-stress_analyser_header h1,
+    .st-key-sensitivity_analysis_header h1 { padding: 0; }
     .st-key-simulation_scenario .scenario-title {
         font-size: 2rem; font-weight: 700; padding: 0; margin: 0 0 .5rem; }
     .st-key-simulation_scenario .scenario-preset-heading {
@@ -398,6 +418,7 @@ STRESS_ANALYSER_ICON = (
     '<path d="m12 3 10 5-10 5L2 8 12 3Z" />'
     '<path d="m2 12 10 5 10-5M2 16l10 5 10-5" />'
 )
+SENSITIVITY_ANALYSIS_ICON = '<path d="M4 3v17h17M9 16V9M14 16V5M19 16v-4" />'
 
 
 def render_exploration_icon(shapes):
@@ -454,9 +475,7 @@ def render_home():
         st.button("View section →", on_click=navigate, args=(NAVIGATION[0],), key="home_simulation")
     with sensitivity:
         with st.container(border=False, height="stretch", key="home_sensitivity_card"):
-            render_exploration_icon(
-                '<path d="M4 3v17h17M9 16V9M14 16V5M19 16v-4" />'
-            )
+            render_exploration_icon(SENSITIVITY_ANALYSIS_ICON)
             st.caption("02 · SENSITIVITY ANALYSIS")
             st.markdown("#### Understand what matters")
             st.write("Explore the influence of material properties "
@@ -518,7 +537,7 @@ def render_simulation_inputs():
         temperature, duration, thickness, copper = st.columns(4)
         delta_T = temperature.number_input("Delta T (°C or K)", key="field_delta_T", step=5.0)
         t_hours = duration.number_input("Soak Time (hours)", min_value=0.0, key="field_t_hours", step=1.0)
-        h_mm = thickness.number_input("Dielectric Thickness (mm)", min_value=0.001, key="field_h_mm", step=0.1)
+        h_mm = thickness.number_input("Laminate Thickness (mm)", min_value=0.001, key="field_h_mm", step=0.1)
         alpha_cu = copper.number_input("Copper Foil CTE (ppm/K)", key="field_alpha_cu", step=0.5)
 
         st.markdown('<h3 class="scenario-section-heading">Material Properties</h3>', unsafe_allow_html=True)

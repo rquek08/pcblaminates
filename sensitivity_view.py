@@ -8,7 +8,7 @@ import streamlit as st
 
 from sensitivity_analysis import (
     EXPOSURE, FIXED_META, MATERIAL, OUTPUTS, PARAMETERS, STUDIES,
-    default_ranges, excel_report, notebook_baseline, run_analysis,
+    default_ranges, excel_report, reference_baseline, run_analysis,
 )
 
 
@@ -19,33 +19,55 @@ def calculate(config):
 
 
 def render_sensitivity(simulation_scenario):
-    st.title("Sensitivity Analysis")
-    st.caption("Explore which inputs drive variation in the calculated stress index using the notebook's Sobol workflow.")
+    with st.container(horizontal=True, wrap=False, vertical_alignment="center",
+                      gap="small", key="sensitivity_analysis_header"):
+        st.markdown(
+            '<div class="exploration-icon" aria-hidden="true">'
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+            'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+            '<path d="M4 3v17h17M9 16V9M14 16V5M19 16v-4" />'
+            '</svg></div>',
+            unsafe_allow_html=True, width="content",
+        )
+        st.title("Sensitivity Analysis")
+    st.caption("Explore how material properties and exposure conditions influence the calculated stress index using Sobol sensitivity analysis.")
+    if st.session_state.get("sens_source") == "Notebook reference values":
+        st.session_state["sens_source"] = "Default reference scenario"
     with st.container(border=True):
         study = st.radio("Study", STUDIES, horizontal=True, key="sens_study", persist_state="session")
         source, output = st.columns(2)
         with source:
-            baseline_source = st.selectbox("Starting fixed values",
-                                           ["Notebook reference values", "Stress analyser scenario"], key="sens_source", persist_state="session")
+            baseline_source = st.selectbox("Starting scenario",
+                                           ["Default reference scenario", "Stress analyser scenario"], key="sens_source", persist_state="session",
+                                           help="Use a built-in example scenario or your most recent Stress Analyser inputs. "
+                                                "Selected parameters vary over their ranges; the other inputs stay fixed.")
         with output:
             target = st.selectbox("Response to analyse", list(OUTPUTS),
                                   format_func=lambda key: f"{OUTPUTS[key][0]} ({OUTPUTS[key][1]})",
                                   key="sens_output", persist_state="session")
-        p = notebook_baseline(study) if baseline_source == "Notebook reference values" else dict(simulation_scenario)
+        p = reference_baseline(study) if baseline_source == "Default reference scenario" else dict(simulation_scenario)
+        if baseline_source == "Default reference scenario":
+            st.caption("The default reference scenario is a built-in example, independent of the material preset: "
+                       "1.6 mm thickness, a 50 K temperature change and approximately 132.4 hours of exposure. "
+                       "View or edit its unvaried properties under Fixed inputs for this study.")
+        else:
+            st.caption("Start from your most recent Stress Analyser inputs. "
+                       "Selected parameters vary over their ranges; all other inputs remain fixed and editable below.")
         group = STUDIES.index(study)
         allowed = EXPOSURE if group == 0 else MATERIAL if group == 1 else list(PARAMETERS)
         keys = st.multiselect("Parameters to vary", allowed, default=allowed,
                               format_func=lambda key: PARAMETERS[key][0], key=f"sens_parameters_{group}", persist_state="session")
         st.caption("Moisture uptake is represented by saturation concentration Csat and diffusivity D. "
-                   "Poisson's ratio and copper CTE are fixed. Input distributions are independent.")
+                   "Copper CTE remains fixed. Poisson's ratio can be varied in material and combined studies. "
+                   "Input distributions are independent.")
 
         if group == 0:
             mode = st.radio("Diffusivity model", ["Arrhenius", "Fixed D"], horizontal=True, key="sens_diffusion", persist_state="session")
-            st.caption("Arrhenius follows notebook case A: temperature changes both diffusion and thermal mismatch. "
+            st.caption("With Arrhenius diffusion, temperature changes both diffusivity and thermal mismatch. "
                        "Fixed D changes only the thermal branch when ΔT varies.")
         else:
             mode = "Fixed D"
-            st.caption("Effective diffusivity is varied directly, as in notebook case B. "
+            st.caption("Effective diffusivity is varied directly. "
                        "Temperature affects the thermal branch; D has no additional temperature dependence in this study.")
         diffusion = {"mode": mode}
         if mode == "Arrhenius":
@@ -58,7 +80,7 @@ def render_sensitivity(simulation_scenario):
                 diffusion["T_ref_C"] = tref.number_input("Reference temperature (°C)", min_value=-273.14,
                                                         value=25.0, step=1.0, key="sens_T_ref_C", persist_state="session")
                 st.caption("Exposure temperature = reference temperature + ΔT. "
-                           "Notebook diffusion constants are editable reference values.")
+                           "The diffusion constants are editable starting values.")
 
         scope = hashlib.sha256(json.dumps(dict(study=study, source=baseline_source, baseline=p),
                                           sort_keys=True).encode()).hexdigest()[:12]
@@ -77,12 +99,11 @@ def render_sensitivity(simulation_scenario):
                 elif key == "nu":
                     options.update(min_value=-0.99, max_value=0.499, format="%.3f", step=0.01)
                 p[key] = columns[i % 3].number_input(f"{label} ({unit})", **options)
-            st.caption("Inputs excluded from the varied parameter list use these fixed values. "
-                       "The notebook's material study also varied Poisson's ratio; it is fixed here to match your focus list.")
+            st.caption("Inputs excluded from the varied parameter list use these fixed values.")
 
         st.markdown("#### Parameter ranges")
-        st.caption("Bounds are converted from the notebook to ppm/K, MPa, hours, and mm. "
-                   "Edit them for your intended study; they are exploratory ranges.")
+        st.caption("Ranges use ppm/K for CTE, MPa for modulus, hours for exposure and mm for thickness; "
+                   "Poisson's ratio is dimensionless. Edit these exploratory bounds for your intended study.")
         if not keys:
             st.info("Select at least one parameter to set up a sensitivity study.")
             return

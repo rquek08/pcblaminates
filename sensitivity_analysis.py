@@ -14,17 +14,18 @@ PARAMETERS = {
     "alpha_lam": ("Laminate CTE", "ppm/K", 8.0, 23.0, "uniform"),
     "beta": ("Moisture expansion (CHE)", "m³/kg", 1.15e-4, 3.8e-4, "uniform"),
     "E": ("Young's modulus", "MPa", 7500.0, 28000.0, "uniform"),
+    "nu": ("Poisson's ratio", "dimensionless", 0.175, 0.32, "uniform"),
     "Csat": ("Saturation moisture concentration", "mol/m³", 92.5, 366.0, "uniform"),
     "D": ("Effective diffusivity", "m²/s", 2.15e-14, 2.0e-12, "log-uniform"),
     "delta_T": ("Temperature change ΔT", "K", 10.0, 100.0, "uniform"),
     "t_hours": ("Exposure time", "h", 24.0, 8760.0, "log-uniform"),
-    "h_mm": ("Dielectric thickness", "mm", 0.2, 3.2, "uniform"),
+    "h_mm": ("Laminate thickness", "mm", 0.2, 3.2, "uniform"),
 }
 EXPOSURE = ["delta_T", "t_hours", "h_mm"]
 MATERIAL = [key for key in PARAMETERS if key not in EXPOSURE]
 STUDIES = ["A · Exposure conditions", "B · Material properties", "Combined · All focus parameters"]
 FIXED_META = {key: value[:2] for key, value in PARAMETERS.items()}
-FIXED_META.update(nu=("Poisson's ratio", "dimensionless"), alpha_cu=("Copper CTE", "ppm/K"))
+FIXED_META.update(alpha_cu=("Copper CTE", "ppm/K"))
 OUTPUTS = {
     "sigma_abs": ("Stress-index magnitude", "MPa"),
     "sigma_index": ("Signed stress index", "MPa"),
@@ -34,11 +35,15 @@ OUTPUTS = {
 }
 
 
-def notebook_baseline(study):
+def reference_baseline(study):
     return dict(E=24056.0, nu=0.182, alpha_lam=13.5,
                 alpha_cu=17.0 if study == STUDIES[0] else 16.5,
                 D=2.1e-12, Csat=222.04, beta=1.4e-4, h_mm=1.6,
                 t_hours=476500.0 / 3600, delta_T=50.0)
+
+
+# Preserve compatibility with existing analysis scripts.
+notebook_baseline = reference_baseline
 
 
 def default_ranges(keys):
@@ -122,6 +127,8 @@ def saltelli_samples(ranges, N, seed=12345):
             raise ValueError(f"{PARAMETERS[keys[i]][0]} bounds must be positive.")
         if keys[i] in ("D", "Csat", "beta", "t_hours") and lo < 0:
             raise ValueError(f"{PARAMETERS[keys[i]][0]} bounds cannot be negative.")
+        if keys[i] == "nu" and (lo <= -1 or hi >= 0.5):
+            raise ValueError("Poisson's ratio bounds must lie strictly between −1 and 0.5.")
         for j in (i, i + len(keys)):
             if row["Distribution"] == "log-uniform":
                 if lo <= 0:
