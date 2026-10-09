@@ -20,9 +20,7 @@
       border: 1px solid #cbdcd3; background: #fff; color: #315e50;
       border-radius: 999px; padding: 8px 18px; transition: background .2s;
     }
-    button:hover:not(:disabled) { background: #e7f1eb; }
-    button:disabled { cursor: not-allowed; opacity: .45; }
-    button[aria-pressed="true"]:disabled { opacity: 1; }
+    button:hover { background: #e7f1eb; }
     button:focus-visible { outline: 3px solid #368575; outline-offset: 3px; }
     button[aria-pressed="true"] { background: #368575; border-color: #368575; color: #fff; }
     #reset { margin-left: auto; background: transparent; font-weight: 400; }
@@ -61,7 +59,9 @@
     }
     .viewer[data-mode="moisture"] .laminate { transform: scale3d(1.18, 1.18, 1.25); }
     .viewer[data-mode="heat"] .laminate { transform: scale3d(1.10, 1.10, 1.10); }
-    .viewer[data-mode="heat"] .copper { transform: translateZ(49px) scale3d(1.17, 1.17, 1.17); }
+    .viewer[data-mode="combined"] .laminate { transform: scale3d(1.28, 1.28, 1.35); }
+    .viewer[data-mode="heat"] .copper,
+    .viewer[data-mode="combined"] .copper { transform: translateZ(49px) scale3d(1.17, 1.17, 1.17); }
     .legend { display: flex; justify-content: center; gap: 24px; font-size: 13px; margin: -8px 0 16px; }
     .legend span { display: flex; align-items: center; gap: 8px; }
     .swatch { width: 12px; height: 12px; border-radius: 3px; background: #d58c5b; }
@@ -81,7 +81,7 @@
 <body>
   <section class="viewer" data-mode="rest" aria-label="Interactive PCB layer illustration">
     <h2>A look at the copper–laminate interface</h2>
-    <p class="intro">Choose one exposure. Click Reset before choosing again.</p>
+    <p class="intro">Choose Moisture, Heat or both. Click an active option to remove it.</p>
     <div class="controls" role="group" aria-label="Exposure controls">
       <button type="button" data-exposure="moisture" aria-pressed="false">Moisture</button>
       <button type="button" data-exposure="heat" aria-pressed="false">Heat</button>
@@ -115,18 +115,22 @@
     const scene = document.querySelector('.scene');
     const status = document.querySelector('#status');
     const buttons = document.querySelectorAll('[data-exposure]');
+    const exposures = new Set();
     const descriptions = {
       rest: 'Original dimensions, without the effect of moisture or heat.',
       moisture: 'Moisture: the laminate swells in length, width and thickness. The copper foil stays the same size.',
-      heat: 'Heat: both layers expand. Different coefficients of thermal expansion (CTE) produce different amounts of expansion.'
+      heat: 'Heat: both layers expand. Different coefficients of thermal expansion (CTE) produce different amounts of expansion.',
+      combined: 'Heat + moisture: both layers retain their thermal expansion, and moisture adds swelling to the laminate only. Copper has no additional moisture expansion.'
     };
-    function selectExposure(mode) {
-      // An exposure stays locked until the user explicitly resets the layers.
-      if (mode !== 'rest' && viewer.dataset.mode !== 'rest') return;
+    function selectExposure(exposure) {
+      if (exposure === 'rest') exposures.clear();
+      else if (exposures.has(exposure)) exposures.delete(exposure);
+      else exposures.add(exposure);
+      // Apply each contribution once, so both click orders reach the same dimensions.
+      const mode = exposures.size === 2 ? 'combined' : exposures.values().next().value || 'rest';
       viewer.dataset.mode = mode;
       buttons.forEach(button => {
-        button.disabled = mode !== 'rest';
-        button.setAttribute('aria-pressed', String(button.dataset.exposure === mode));
+        button.setAttribute('aria-pressed', String(exposures.has(button.dataset.exposure)));
       });
       status.textContent = descriptions[mode];
       scene.setAttribute('aria-label', descriptions[mode]);

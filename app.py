@@ -213,26 +213,139 @@ def render_style():
     [data-testid="stBaseButton-primary"]:hover { background-color: #2b6a5d; border-color: #2b6a5d; }
     .eyebrow { color: #368575; font-size: .78rem; font-weight: 650; letter-spacing: .16em; }
     .hero-title { font-size: clamp(2.25rem, 4vw, 3.8rem); line-height: 1.15;
-        text-align: center; font-weight: 700; letter-spacing: -.035em;
-        max-width: 1100px; margin: .6rem auto 2.5rem; text-wrap: balance; }
+        text-align: left; font-weight: 700; letter-spacing: -.035em;
+        max-width: 640px; margin: 0 0 1.2rem; text-wrap: balance; }
     .hero-copy { font-size: 1rem; line-height: 1.75; max-width: 640px; opacity: .85; }
+    [data-testid="stColumn"]:has(.st-key-home_moisture_path) {
+        background: rgba(54,133,117,.045); border-radius: .75rem; }
+    [data-testid="stColumn"]:has(.st-key-home_thermal_path) {
+        background: rgba(200,125,85,.045); border-radius: .75rem; }
+    .st-key-home_combined_index { background: rgba(54,133,117,.07); border-radius: .75rem; }
+    .flow-step { font-size: .75rem; font-weight: 650; letter-spacing: .08em;
+        color: #368575; margin: 0 0 .3rem; }
+    .flow-down { text-align: center; color: #78988e; font-size: 1.5rem; margin: .25rem 0; }
+    .flow-merge { height: 80px; }
+    .flow-merge svg { display: block; width: 100%; height: 80px; }
+    .flow-merge-mobile { display: none; }
     [data-testid="stMetricValue"] { font-size: 1.8rem; }
     @media (max-width: 760px) {
         .block-container { padding-top: 1rem; }
         .st-key-main_navigation button { padding: .6rem .5rem; }
+        .flow-merge svg { display: none; }
+        .flow-merge-mobile { display: block; text-align: center; padding: 1.25rem 0;
+            color: #368575; }
     }
     </style>
     """, unsafe_allow_html=True)
 
 
-def render_home():
-    st.markdown(
-        '<h1 class="hero-title">Hygrothermal Effects on Copper-Laminate Interfaces</h1>',
-        unsafe_allow_html=True,
+def render_home_stress_flow():
+    st.subheader("Moisture and Temperature Contributions to the Stress Index")
+    st.write(
+        "Moisture causes the laminate to swell, while temperature changes produce different degrees of "
+        "expansion in the copper and laminate. Bonding restricts this relative movement, "
+        "creating mechanical loading at their interface. The calculation below combines "
+        "the two strain contributions through the laminate's effective in-plane stiffness."
     )
-    text, illustration = st.columns([1.05, 1], gap="large")
+    moisture, thermal = st.columns(2, gap="large", border=True)
+    with moisture.container(border=False, key="home_moisture_path"):
+        st.markdown("#### Moisture contribution")
+        st.markdown('<p class="flow-step">01 · MOISTURE UPTAKE</p>', unsafe_allow_html=True)
+        st.write("Diffusion sets the moisture absorbed at exposure time t.")
+        st.latex(r"C_t = \frac{M_t}{M_\infty}\,C_{\mathrm{sat}}, \qquad W(t) = C_t M_{\mathrm{H_2O}}")
+        st.markdown('<p class="flow-down" aria-hidden="true">↓</p>', unsafe_allow_html=True)
+        st.markdown('<p class="flow-step">02 · SWELLING STRAIN</p>', unsafe_allow_html=True)
+        st.write("Absorbed water causes the laminate to expand.")
+        st.latex(r"\varepsilon_h = \beta\,W(t)")
+        st.markdown('<p class="flow-down" aria-hidden="true">↓</p>', unsafe_allow_html=True)
+        st.markdown('<p class="flow-step">03 · STRESS-INDEX CONTRIBUTION</p>', unsafe_allow_html=True)
+        st.latex(r"\sigma_h = \frac{E_{\mathrm{eff}}}{1-\nu_{\mathrm{eff}}}\,\varepsilon_h")
+    with thermal.container(border=False, key="home_thermal_path"):
+        st.markdown("#### Thermal contribution")
+        st.markdown('<p class="flow-step">01 · TEMPERATURE CHANGE</p>', unsafe_allow_html=True)
+        st.write("Heating or cooling changes each material's dimensions.")
+        st.latex(r"\Delta T = T - T_{\mathrm{ref}}")
+        st.markdown('<p class="flow-down" aria-hidden="true">↓</p>', unsafe_allow_html=True)
+        st.markdown('<p class="flow-step">02 · EXPANSION MISMATCH STRAIN</p>', unsafe_allow_html=True)
+        st.write("Different CTEs create a relative expansion strain.")
+        st.latex(r"\varepsilon_T = (\alpha_{\mathrm{lam}}-\alpha_{\mathrm{Cu}})\,\Delta T")
+        st.markdown('<p class="flow-down" aria-hidden="true">↓</p>', unsafe_allow_html=True)
+        st.markdown('<p class="flow-step">03 · STRESS-INDEX CONTRIBUTION</p>', unsafe_allow_html=True)
+        st.latex(r"\sigma_T = \frac{E_{\mathrm{eff}}}{1-\nu_{\mathrm{eff}}}\,\varepsilon_T")
+
+    st.markdown('''
+        <div class="flow-merge">
+          <svg viewBox="0 0 1000 80" preserveAspectRatio="none" role="img"
+               aria-label="Hygroscopic and thermal contributions merge into the combined stress index">
+            <g fill="none" stroke="#78988e" stroke-width="2" vector-effect="non-scaling-stroke">
+              <path d="M250 0 V20 Q250 32 262 32 H488 Q500 32 500 44" />
+              <path d="M750 0 V20 Q750 32 738 32 H512 Q500 32 500 44 V70" />
+              <path d="M492 60 L500 70 L508 60" />
+            </g>
+          </svg>
+          <span class="flow-merge-mobile">↓ Combine both contributions</span>
+        </div>
+    ''', unsafe_allow_html=True)
+    with st.container(border=True, key="home_combined_index"):
+        st.markdown("#### Combined stress index")
+        st.latex(
+            r"\sigma_{\mathrm{index}} = \sigma_h + \sigma_T"
+            r" = \frac{E_{\mathrm{eff}}}{1-\nu_{\mathrm{eff}}}"
+            r"\left(\varepsilon_h + \varepsilon_T\right)"
+        )
+        st.write("A signed measure of the constrained in-plane response for comparing materials and exposure conditions.")
+        st.caption("The two contributions can reinforce or offset each other, depending on the direction of the thermal mismatch.")
+
+    with st.expander("Moisture uptake model & equation symbols"):
+        st.write("For one-dimensional diffusion through a plane sheet of thickness h, "
+                 "Fick's second law gives the fractional moisture uptake used in the swelling path.")
+        st.latex(r"\frac{\partial C}{\partial t} = D\frac{\partial^2 C}{\partial z^2}")
+        st.latex(
+            r"\frac{M_t}{M_\infty} = 1-\frac{8}{\pi^2}"
+            r"\sum_{n=0}^{\infty}\frac{1}{(2n+1)^2}"
+            r"\exp\!\left[-\frac{(2n+1)^2\pi^2 D t}{h^2}\right]"
+        )
+        st.caption("The plane-sheet solution assumes an initially dry laminate, "
+                   "constant diffusivity and constant surface moisture concentration.")
+        st.markdown(r"""
+| Symbol | Meaning | Units |
+| :--- | :--- | :--- |
+| $D$ | Moisture diffusivity | m²/s |
+| $h$ | Laminate thickness | m |
+| $t$ | Exposure time | s |
+| $z$ | Position through the laminate thickness | m |
+| $C$ | Local moisture concentration in the diffusion equation | mol/m³ |
+| $M_t/M_\infty$ | Fractional moisture uptake relative to saturation | Dimensionless |
+| $n$ | Series summation index, starting at zero | Dimensionless |
+| $C_{\mathrm{sat}}$ | Saturation moisture concentration | mol/m³ |
+| $C_t$ | Average moisture concentration at time $t$ | mol/m³ |
+| $W(t)$ | Absorbed moisture concentration by mass at time $t$ | kg/m³ |
+| $M_{\mathrm{H_2O}}$ | Molar mass of water, 0.018015 | kg/mol |
+| $\beta$ | Coefficient of hygroscopic expansion | m³/kg |
+| $\alpha_{\mathrm{lam}}$ | Laminate in-plane coefficient of thermal expansion | ppm/K |
+| $\alpha_{\mathrm{Cu}}$ | Copper coefficient of thermal expansion | ppm/K |
+| $T$ | Exposure temperature | °C or K |
+| $T_{\mathrm{ref}}$ | Reference temperature, in the same units as $T$ | °C or K |
+| $\Delta T$ | Temperature change from the reference | K or °C difference |
+| $E_{\mathrm{eff}}$ | Effective modulus | MPa |
+| $\nu_{\mathrm{eff}}$ | Effective Poisson's ratio | Dimensionless |
+| $\varepsilon_h$ | Hygroscopic swelling strain | Dimensionless |
+| $\varepsilon_T$ | Thermal mismatch strain | Dimensionless |
+| $\sigma_h$ | Hygroscopic contribution to the stress index | MPa |
+| $\sigma_T$ | Thermal contribution to the stress index | MPa |
+| $\sigma_{\mathrm{index}}$ | Combined stress index | MPa |
+""")
+        st.caption("The factor 10⁻⁶ converts CTE values from ppm/K to K⁻¹.")
+        st.caption("The stiffness factor Eeff/(1 − νeff) represents an effective linear-elastic, equibiaxial in-plane constraint.")
+
+
+def render_home():
+    text, illustration = st.columns([1.05, 1], gap="large", vertical_alignment="top")
     with text:
-        st.subheader("PCB Laminates")
+        st.markdown(
+            '<h1 class="hero-title">Hygrothermal Effects on Copper-Laminate Interfaces</h1>',
+            unsafe_allow_html=True,
+        )
         st.markdown(
             '<p class="hero-copy">In the field of electronics, printed circuit boards (PCBs) '
             'are essential components that connect various electronic parts. One of the most '
@@ -254,20 +367,7 @@ def render_home():
         st.iframe(Path(__file__).parent / "assets" / "laminate_animation.html", height="content")
 
     st.write("")
-    st.subheader("Why temperature and moisture matter")
-    heat, moisture, interface = st.columns(3, gap="medium")
-    with heat.container(border=True):
-        st.markdown("#### Temperature changes")
-        st.write("Copper and the laminate have different coefficients of thermal expansion. "
-                 "Heating or cooling creates a mismatch in their free expansion.")
-    with moisture.container(border=True):
-        st.markdown("#### Moisture uptake")
-        st.write("Water diffuses into the dielectric and causes swelling. The amount absorbed "
-                 "depends on material properties, exposure time, and thickness.")
-    with interface.container(border=True):
-        st.markdown("#### A bonded interface")
-        st.write("Bonding constrains the materials' movement. The resulting stresses can "
-                 "contribute to warpage and interface damage, affecting board reliability.")
+    render_home_stress_flow()
 
     st.write("")
     st.subheader("Explore the connection from material to response")
