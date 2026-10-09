@@ -60,13 +60,16 @@ def expansion_figure(state, length, width, thickness, copper_um, magnification):
     max_scale = max(1, 1 + magnification * state["laminate_strain"],
                     1 + magnification * state["copper_strain"])
     figure.update_layout(
-        height=420, margin=dict(l=0, r=0, b=0, t=40),
-        legend=dict(orientation="h", y=-0.05),
-        scene=dict(aspectmode="data", camera=dict(eye=dict(x=1.5, y=-1.8, z=1.2)),
+        # Reserve room below the scene, including when legend items wrap.
+        height=375, margin=dict(l=0, r=0, b=75, t=55, autoexpand=False),
+        legend=dict(orientation="h", x=.5, xanchor="center", y=-.04, yanchor="top"),
+        scene=dict(domain=dict(x=[0, 1], y=[0, 1]), aspectmode="data",
+                   camera=dict(center=dict(x=0, y=0, z=0), eye=dict(x=1.5, y=-1.8, z=1.2)),
                    xaxis=dict(title="Length (mm)", range=[-length * max_scale * .65, length * max_scale * .65]),
                    yaxis=dict(title="Width (mm)", range=[-width * max_scale * .65, width * max_scale * .65]),
                    zaxis=dict(title="Thickness (mm)", range=[-.1, copper_bottom + copper_thickness + .1])),
-        updatemenus=[dict(type="buttons", direction="left", x=0, y=1.1, showactive=False,
+        updatemenus=[dict(type="buttons", direction="left", x=.5, xanchor="center",
+                         y=1.15, yanchor="top", showactive=False,
                          buttons=[dict(label="Replay expansion", method="animate",
                                        args=[[f"expansion_{i}" for i in range(21)],
                                              dict(mode="immediate", frame=dict(duration=65, redraw=True),
@@ -96,7 +99,9 @@ def property_space_figure(space, candidates):
     figure.add_trace(go.Scatter3d(
         x=candidates["alpha_lam"], y=candidates["beta"], z=candidates["E"],
         mode="markers", name="Library comparisons",
-        marker=dict(size=7, symbol="diamond", color="#c87d55", line=dict(width=1, color="#875637")),
+        marker=dict(size=7, symbol="diamond",
+                    color=np.where(candidates["feasible"], "#368575", "#c87d55"),
+                    line=dict(width=1, color=np.where(candidates["feasible"], "#205f4b", "#875637"))),
         customdata=candidates[["grade", "sigma_index", "status"]].to_numpy(),
         hovertemplate="%{customdata[0]}<br>Index: %{customdata[1]:+.3f} MPa<br>%{customdata[2]}<extra></extra>",
     ))
@@ -111,9 +116,9 @@ def property_space_figure(space, candidates):
 def render_inverse(records):
     st.caption("Identify material-property combinations within a chosen stress-index limit, "
                "then compare library materials with this model-based design space.")
-    controls, preview = st.columns([1, 1.05], gap="large")
+    controls, preview = st.columns([1, 1.05], gap="large", border=True)
     with controls:
-        with st.container(border=True):
+        with st.container(border=False):
             st.subheader("Design constraints")
             limit = st.number_input("Maximum stress index magnitude (MPa)", min_value=0.0, value=10.0,
                                     step=1.0, key="inverse_limit", persist_state="session")
@@ -142,30 +147,33 @@ def render_inverse(records):
             if st.session_state.get("inverse_preview_material") not in preview_names:
                 st.session_state["inverse_preview_material"] = preview_names[0]
             selected = st.selectbox("Preview material", preview_names, key="inverse_preview_material", persist_state="session")
-            st.caption("This material supplies the preview properties; it does not restrict the property-space search.")
+        st.caption("This material supplies the preview properties; it does not restrict the property-space search.")
     exposure = dict(h_mm=thickness, t_hours=hours, delta_T=exposure_temperature - reference_temperature,
                     alpha_cu=copper_cte)
     record = next(r for r in matching if r["name"] == selected)
     with preview:
-        st.subheader("Copper–laminate expansion preview")
-        display = st.radio("Display scale", ["True scale (1×)", "Magnified strain (100×)"],
-                            horizontal=True, key="inverse_display_scale", persist_state="session")
-        magnification = 1 if display == "True scale (1×)" else 100
-        state = expansion_state(record["properties"], exposure, length, width)
-        try:
-            st.plotly_chart(expansion_figure(state, length, width, thickness, copper_um, magnification),
-                            width="stretch", key="inverse_expansion_preview")
-        except ValueError as exc:
-            st.error(str(exc))
-        lam, cu = st.columns(2)
-        lam.metric("Laminate length change", f"{state['delta_length_laminate'] * 1000:+.2f} µm")
-        cu.metric("Copper length change", f"{state['delta_length_copper'] * 1000:+.2f} µm")
+        with st.container(border=False):
+            st.subheader("Copper–laminate expansion preview")
+            with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+                st.markdown("Display scale:", width="content")
+                display = st.radio("Display scale", ["True scale (1×)", "Magnified strain (100×)"],
+                                   horizontal=True, label_visibility="collapsed",
+                                   key="inverse_display_scale", persist_state="session")
+            magnification = 1 if display == "True scale (1×)" else 100
+            state = expansion_state(record["properties"], exposure, length, width)
+            try:
+                st.plotly_chart(expansion_figure(state, length, width, thickness, copper_um, magnification),
+                                width="stretch", key="inverse_expansion_preview")
+            except ValueError as exc:
+                st.error(str(exc))
+        with st.container(border=False, key="inverse_length_changes"):
+            lam, cu = st.columns(2)
+            lam.metric("Laminate length change", f"{state['delta_length_laminate'] * 1000:+.2f} µm")
+            cu.metric("Copper length change", f"{state['delta_length_copper'] * 1000:+.2f} µm")
         st.caption(f"Preview stress index: {state['sigma_index']:+.2f} MPa. "
                    "Displayed dimensions use the selected geometry; 100× magnifies strain only. "
                    "Thickness stays fixed because through-thickness expansion coefficients are not provided. "
                    "The layer gap is for visibility.")
-        st.caption("This is unconstrained in-plane free expansion. The model does not predict bending, "
-                   "warpage or interface separation.")
 
     with st.expander("Material-property search bounds", expanded=False):
         st.caption("Starting bounds span the library materials at the chosen environment. "
@@ -209,11 +217,15 @@ def render_inverse(records):
                "Sampling does not establish the entire feasible boundary.")
     st.subheader("Candidate library comparisons")
     st.caption("Entries are compared with your index limit and property bounds, using your selected "
-               "thickness and exposure time. These are preliminary model comparisons, not material recommendations.")
+               "thickness and exposure time. Green rows and green library diamonds meet both limits. "
+               "These are preliminary model comparisons, not material recommendations.")
     table = candidates[["grade", "sigma_index", "margin", "status"]].rename(
         columns={"grade": "Material", "sigma_index": "Signed index (MPa)",
                  "margin": "Index-limit margin (MPa)", "status": "Comparison"})
-    st.dataframe(table, hide_index=True, width="stretch",
+    highlighted_table = table.style.apply(
+        lambda row: ["background-color: #e4f2eb; color: #205f4b"] * len(row)
+        if candidates.loc[row.name, "feasible"] else [""] * len(row), axis=1)
+    st.dataframe(highlighted_table, hide_index=True, width="stretch",
                  column_config={"Signed index (MPa)": st.column_config.NumberColumn(format="%.3f"),
                                 "Index-limit margin (MPa)": st.column_config.NumberColumn(format="%.3f")})
     st.caption("Model validation and physical measurements of the interface are needed before qualifying "
