@@ -1,0 +1,64 @@
+.equation-symbol-hint {
+  color: #2f7866;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background .15s;
+}
+.equation-symbol-hint:hover,
+.equation-symbol-hint:focus-visible {
+  background: rgba(54, 133, 117, .12);
+  outline: 2px solid transparent;
+}
+.equation-symbol-hint:focus-visible { outline-color: #368575; outline-offset: 3px; }
+.pcb-equation-card {
+  position: fixed;
+  z-index: 10000;
+  box-sizing: border-box;
+  width: min(310px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  padding: 18px 20px;
+  border: 1px solid #cddfd6;
+  border-top: 4px solid #368575;
+  border-radius: 12px;
+  background: var(--background-color, #fff);
+  color: var(--text-color, #243e38);
+  box-shadow: 0 10px 32px rgba(28, 57, 45, .18), 0 2px 6px rgba(28, 57, 45, .08);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  animation: pcb-card-appear .12s ease-out;
+}
+.pcb-equation-card[hidden] { display: none; }
+.pcb-equation-card__eyebrow {
+  margin: 0 0 8px;
+  color: #568574;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.pcb-equation-card__symbol { margin-bottom: 10px; font-size: 20px; }
+.pcb-equation-card__meaning { margin: 0 0 14px; }
+.pcb-equation-card__units {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid #e3ece6;
+}
+.pcb-equation-card__units-label { color: #60756d; font-size: 12px; }
+.pcb-equation-card__units-value {
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: rgba(54, 133, 117, .09);
+  font-weight: 600;
+}
+@keyframes pcb-card-appear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .equation-symbol-hint { transition: none; }
+  .pcb-equation-card { animation: none; }
+}
