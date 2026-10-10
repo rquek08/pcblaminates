@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Copper and laminate expansion</title>
+  <title>PCB stack-up: moisture and heat</title>
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; font-family: system-ui, -apple-system, sans-serif; color: #243e38; }
     .viewer {
-      min-height: 544px; padding: 22px 24px 18px; overflow: hidden;
+      min-height: 544px; padding: 22px 24px 18px;
       border: 1px solid #dce7e2; border-radius: 20px;
       background: radial-gradient(ellipse at 50% 48%, #fff 0%, #f3f8f5 75%);
     }
@@ -24,174 +24,173 @@
     button:focus-visible { outline: 3px solid #368575; outline-offset: 3px; }
     button[aria-pressed="true"] { background: #368575; border-color: #368575; color: #fff; }
     #reset { margin-left: auto; background: transparent; font-weight: 400; }
-    .scene { position: relative; height: 290px; perspective: 900px; }
-    .stack {
-      position: absolute; left: 50%; top: 48%; width: 260px; height: 156px;
-      transform: translate(-50%, -50%) rotateX(58deg) rotateZ(-32deg);
-      transform-style: preserve-3d;
-    }
-    .layer {
-      position: absolute; inset: 0; transform-style: preserve-3d;
-      transition: transform 1.4s cubic-bezier(.22, .7, .25, 1);
-    }
-    .laminate { --thickness: 58px; --top: #648d76; --front: #38634d; --side: #4a765e; }
-    .copper {
-      --thickness: 8px; --top: #e0a175; --front: #a45b36; --side: #bf764b;
-      transform: translateZ(49px);
-    }
-    .face { position: absolute; backface-visibility: hidden; border: 1px solid rgb(0 0 0 / 8%); }
-    .top, .bottom { inset: 0; background: var(--top); }
-    .top { transform: translateZ(calc(var(--thickness) / 2)); }
-    .bottom { transform: translateZ(calc(var(--thickness) / -2)) rotateX(180deg); }
-    .front, .back { width: 100%; height: var(--thickness); background: var(--front); }
-    .front { top: calc(100% - var(--thickness) / 2); transform: rotateX(-90deg); }
-    .back { top: calc(var(--thickness) / -2); transform: rotateX(90deg); }
-    .left, .right { width: var(--thickness); height: 100%; background: var(--side); }
-    .left { left: calc(var(--thickness) / -2); transform: rotateY(-90deg); }
-    .right { left: calc(100% - var(--thickness) / 2); transform: rotateY(90deg); }
-    .laminate .front, .laminate .back {
-      background: repeating-linear-gradient(0deg, #38634d 0 6px, #416e56 6px 7px);
-    }
-    .circuit-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
-    .board-detail, .circuit { display: block; width: 100%; height: 100%; }
-    .board-detail { color: #d9eee0; }
-    .copper .top {
-      background: linear-gradient(120deg, #b96b40, #d99a68 48%, #be7348);
-      color: #ffe1b3;
-    }
-    .copper .top .circuit { filter: drop-shadow(0 1px 0 #9e5835); }
-    .shadow {
-      position: absolute; inset: -24px; background: rgb(39 71 51 / 14%);
-      filter: blur(18px); transform: translateZ(-48px); border-radius: 30px;
-    }
-    .viewer[data-mode="moisture"] .laminate { transform: scale3d(1.18, 1.18, 1.25); }
-    .viewer[data-mode="heat"] .laminate { transform: scale3d(1.10, 1.10, 1.10); }
-    .viewer[data-mode="combined"] .laminate { transform: scale3d(1.28, 1.28, 1.35); }
-    .viewer[data-mode="heat"] .copper,
-    .viewer[data-mode="combined"] .copper { transform: translateZ(49px) scale3d(1.17, 1.17, 1.17); }
-    .legend { display: flex; justify-content: center; gap: 24px; font-size: 13px; margin: -8px 0 16px; }
-    .legend span { display: flex; align-items: center; gap: 8px; }
-    .swatch { width: 12px; height: 12px; border-radius: 3px; background: #d58c5b; }
-    .swatch.laminate-swatch { background: #648d76; }
-    #status { min-height: 44px; font-size: 14px; line-height: 1.5; margin: 0 0 10px; }
+    .scene { display: block; width: 100%; height: 300px; margin: 6px 0; }
+    .scene text { font-family: inherit; text-anchor: middle; dominant-baseline: middle; }
+    .diagram-heading { font-size: 11px; letter-spacing: 1.6px; fill: #60756d; font-weight: 650; }
+    .mask rect { fill: #368575; }
+    .mask text { fill: #fff; font-size: 11px; font-weight: 600; }
+    .copper rect { fill: #df9b65; }
+    .copper text { fill: #57351f; font-size: 13px; font-weight: 600; }
+    .laminate .material { fill: #dce8cd; }
+    .laminate text { fill: #37522d; font-size: 16px; font-weight: 650; }
+    .layer rect { stroke: rgb(37 66 48 / 18%); stroke-width: 1; }
+    .layer text, .original-outline { pointer-events: none; }
+    .original-outline { fill: none; stroke: #778b80; stroke-width: 1.3; stroke-dasharray: 5 5; opacity: .65; }
+    .legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 18px; font-size: 12px; margin: 0 0 16px; }
+    .legend span { display: flex; align-items: center; gap: 6px; }
+    .swatch { width: 12px; height: 12px; border-radius: 3px; background: #df9b65; }
+    .mask-swatch { background: #368575; }
+    .laminate-swatch { background: #dce8cd; border: 1px solid #a5ba97; }
+    .outline-swatch { background: transparent; border: 1px dashed #778b80; }
+    #status { min-height: 64px; font-size: 14px; line-height: 1.5; margin: 0 0 10px; }
     .note { font-size: 11px; }
     @media (max-width: 420px) {
       .viewer { padding: 18px 14px; }
-      .stack { width: 210px; height: 126px; }
-      .scene { height: 270px; }
+      .scene { height: 260px; }
       button { padding: 8px 14px; }
-      .legend { gap: 16px; }
     }
-    @media (prefers-reduced-motion: reduce) { .layer, button { transition: none; } }
+    @media (prefers-reduced-motion: reduce) { button { transition: none; } }
   </style>
 </head>
 <body>
-  <svg class="circuit-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <defs>
-      <!-- Etched foil artwork is shared by both faces of the copper layer. -->
-      <symbol id="pcb-circuit" viewBox="0 0 260 156">
-        <g fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M108 63H90L67 28H32V18 M108 74H73L54 54H23 M108 86H59L43 104H22 M108 98H87L64 137H30" />
-          <path d="M152 63H169L190 28H226V18 M152 74H188L208 54H237 M152 86H201L218 104H238 M152 98H174L198 137H230" />
-          <path d="M119 56V38L103 22V15 M141 56V39L157 22V15 M119 100V119L103 135V143 M141 100V119L157 135V143" />
-          <circle cx="32" cy="18" r="6" /><circle cx="23" cy="54" r="6" />
-          <circle cx="22" cy="104" r="6" /><circle cx="30" cy="137" r="6" />
-          <circle cx="226" cy="18" r="6" /><circle cx="237" cy="54" r="6" />
-          <circle cx="238" cy="104" r="6" /><circle cx="230" cy="137" r="6" />
-        </g>
-        <g fill="currentColor">
-          <rect x="111" y="59" width="38" height="38" rx="3" />
-          <rect x="100" y="60" width="10" height="6" rx="1" />
-          <rect x="100" y="71" width="10" height="6" rx="1" />
-          <rect x="100" y="83" width="10" height="6" rx="1" />
-          <rect x="100" y="95" width="10" height="6" rx="1" />
-          <rect x="150" y="60" width="10" height="6" rx="1" />
-          <rect x="150" y="71" width="10" height="6" rx="1" />
-          <rect x="150" y="83" width="10" height="6" rx="1" />
-          <rect x="150" y="95" width="10" height="6" rx="1" />
-          <rect x="115" y="48" width="8" height="10" rx="1" />
-          <rect x="137" y="48" width="8" height="10" rx="1" />
-          <rect x="115" y="98" width="8" height="10" rx="1" />
-          <rect x="137" y="98" width="8" height="10" rx="1" />
-          <rect x="99" y="10" width="8" height="10" rx="1" />
-          <rect x="153" y="10" width="8" height="10" rx="1" />
-          <rect x="99" y="138" width="8" height="10" rx="1" />
-          <rect x="153" y="138" width="8" height="10" rx="1" />
-        </g>
-      </symbol>
-    </defs>
-  </svg>
-  <section class="viewer" data-mode="rest" aria-label="Interactive PCB layer illustration">
-    <h2>A look at the copper–laminate interface</h2>
+  <section class="viewer" data-mode="rest" aria-label="Interactive PCB stack-up illustration">
+    <h2>A look inside a PCB</h2>
     <p class="intro">Choose Moisture, Heat or both. Click an active option to remove it.</p>
     <div class="controls" role="group" aria-label="Exposure controls">
       <button type="button" data-exposure="moisture" aria-pressed="false">Moisture</button>
       <button type="button" data-exposure="heat" aria-pressed="false">Heat</button>
       <button type="button" id="reset" aria-label="Reset layers to their original size">Reset</button>
     </div>
-    <div class="scene" role="img" aria-label="A continuous copper foil with an illustrative circuit pattern above a green laminate, shown in 3D">
-      <div class="stack">
-        <div class="shadow"></div>
-        <div class="layer laminate">
-          <div class="face top">
-            <svg class="board-detail" viewBox="0 0 260 156" aria-hidden="true">
-              <g fill="none" stroke="currentColor" stroke-width="1" opacity=".45">
-                <rect x="6" y="6" width="248" height="144" rx="4" />
-                <rect x="98" y="46" width="64" height="64" rx="3" />
-                <path d="M94 46h-5v8 M166 110h5v-8" />
-              </g>
-              <text x="74" y="149" fill="currentColor" font-size="6" letter-spacing="1" opacity=".65">PCB 01</text>
-            </svg>
-          </div><div class="face bottom"></div>
-          <div class="face front"></div><div class="face back"></div>
-          <div class="face left"></div><div class="face right"></div>
-        </div>
-        <div class="layer copper">
-          <div class="face top">
-            <svg class="circuit" viewBox="0 0 260 156" aria-hidden="true"><use href="#pcb-circuit" /></svg>
-          </div>
-          <div class="face bottom"></div>
-          <div class="face front"></div><div class="face back"></div>
-          <div class="face left"></div><div class="face right"></div>
-        </div>
-      </div>
-    </div>
+    <svg class="scene" viewBox="0 0 520 320" xmlns="http://www.w3.org/2000/svg"
+         role="img" aria-labelledby="stack-title stack-description">
+      <title id="stack-title">Cross-section of a PCB with two copper layers</title>
+      <desc id="stack-description">Solder mask, top copper, FR-4 laminate, bottom copper and solder mask at their original dimensions.</desc>
+      <defs>
+        <pattern id="fibreglass" width="12" height="12" patternUnits="userSpaceOnUse">
+          <path d="M0 0H12M0 0V12" fill="none" stroke="#9db78d" stroke-width=".8" opacity=".25" />
+        </pattern>
+      </defs>
+      <text class="diagram-heading" x="260" y="25">TWO COPPER LAYERS · CROSS-SECTION</text>
+      <g id="mask-top" class="layer mask">
+        <rect x="85" y="73" width="350" height="18" />
+        <text x="260" y="82">Solder mask</text>
+      </g>
+      <g id="copper-top" class="layer copper">
+        <rect x="85" y="91" width="350" height="26" />
+        <text x="260" y="104">Copper · L1</text>
+      </g>
+      <g id="laminate" class="layer laminate">
+        <rect class="material" x="85" y="117" width="350" height="96" />
+        <rect x="85" y="117" width="350" height="96" fill="url(#fibreglass)" />
+        <text x="260" y="165">FR-4 / laminate core</text>
+      </g>
+      <g id="copper-bottom" class="layer copper">
+        <rect x="85" y="213" width="350" height="26" />
+        <text x="260" y="226">Copper · L2</text>
+      </g>
+      <g id="mask-bottom" class="layer mask">
+        <rect x="85" y="239" width="350" height="18" />
+        <text x="260" y="248">Solder mask</text>
+      </g>
+      <rect class="original-outline" x="85" y="73" width="350" height="184" />
+    </svg>
     <div class="legend" aria-hidden="true">
-      <span><i class="swatch"></i>Copper foil</span>
+      <span><i class="swatch mask-swatch"></i>Solder mask</span>
+      <span><i class="swatch"></i>Copper</span>
       <span><i class="swatch laminate-swatch"></i>Laminate</span>
+      <span><i class="swatch outline-swatch"></i>Original size</span>
     </div>
-    <p id="status" role="status" aria-live="polite">Original dimensions, without the effect of moisture or heat.</p>
-    <p class="note">Schematic of free expansion, exaggerated for visibility. Layers are separated for clarity.
-      The circuit pattern is illustrative. Heat illustrates copper expanding more than a lower-CTE laminate;
-      actual behaviour depends on material and direction.</p>
+    <p id="status" role="status" aria-live="polite">Original dimensions. A two-layer PCB has two copper layers, with a laminate core and protective solder masks.</p>
+    <p class="note">Illustrative free expansion, exaggerated and not to scale. Bonding constrains real layers.
+      Solder masks follow the adjacent copper here; their own expansion is not modelled.
+      Heat shows copper expanding more than a lower-CTE laminate; actual behaviour depends on the material and direction.</p>
   </section>
   <script>
     const viewer = document.querySelector('.viewer');
-    const scene = document.querySelector('.scene');
+    const description = document.querySelector('#stack-description');
     const status = document.querySelector('#status');
     const buttons = document.querySelectorAll('[data-exposure]');
     const exposures = new Set();
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const layers = ['mask-top', 'copper-top', 'laminate', 'copper-bottom', 'mask-bottom'].map(id => {
+      const group = document.getElementById(id);
+      return {rectangles: group.querySelectorAll('rect'), label: group.querySelector('text')};
+    });
     const descriptions = {
-      rest: 'Original dimensions, without the effect of moisture or heat.',
-      moisture: 'Moisture: the laminate swells in length, width and thickness. The copper foil stays the same size.',
-      heat: 'Heat: both layers expand. Different coefficients of thermal expansion (CTE) produce different amounts of expansion.',
-      combined: 'Heat + moisture: both layers retain their thermal expansion, and moisture adds swelling to the laminate only. Copper has no additional moisture expansion.'
+      rest: 'Original dimensions. A two-layer PCB has two copper layers, with a laminate core and protective solder masks.',
+      moisture: 'Moisture: the laminate core swells in length and thickness. Both copper layers retain their original dimensions.',
+      heat: 'Heat: the laminate core and both copper layers expand. Different coefficients of thermal expansion produce different amounts of expansion.',
+      combined: 'Heat + moisture: both copper layers keep their thermal expansion, while the laminate core also swells from moisture.'
     };
+
+    function dimensions() {
+      const moisture = exposures.has('moisture') ? 1 : 0;
+      const heat = exposures.has('heat') ? 1 : 0;
+      // Each exposure contributes once. These are illustrative display strains.
+      const coreWidth = 350 * (1 + .18 * moisture + .10 * heat);
+      const coreHeight = 96 * (1 + .25 * moisture + .10 * heat);
+      const copperWidth = 350 * (1 + .17 * heat);
+      const copperHeight = 26 * (1 + .17 * heat);
+      const heights = [18, copperHeight, coreHeight, copperHeight, 18];
+      const widths = [copperWidth, copperWidth, coreWidth, copperWidth, copperWidth];
+      let y = 165 - heights.reduce((sum, height) => sum + height, 0) / 2;
+      return heights.map((height, i) => {
+        const row = {x: 260 - widths[i] / 2, y, width: widths[i], height};
+        y += height;
+        return row;
+      });
+    }
+
+    function render(rows) {
+      rows.forEach((row, i) => {
+        layers[i].rectangles.forEach(rect => {
+          for (const [key, value] of Object.entries(row)) rect.setAttribute(key, value);
+        });
+        layers[i].label.setAttribute('y', row.y + row.height / 2);
+      });
+    }
+
+    let current = dimensions();
+    let animationFrame = null;
+    render(current);
+    function animate(target) {
+      if (animationFrame !== null) cancelAnimationFrame(animationFrame);
+      if (reducedMotion.matches) {
+        current = target;
+        render(current);
+        animationFrame = null;
+        return;
+      }
+      const start = current.map(row => ({...row}));
+      const startedAt = performance.now();
+      function step(now) {
+        const progress = Math.min(1, (now - startedAt) / 1100);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        current = start.map((row, i) => Object.fromEntries(
+          Object.keys(row).map(key => [key, row[key] + (target[i][key] - row[key]) * eased])
+        ));
+        render(current);
+        animationFrame = progress < 1 ? requestAnimationFrame(step) : null;
+      }
+      animationFrame = requestAnimationFrame(step);
+    }
+
     function selectExposure(exposure) {
       if (exposure === 'rest') exposures.clear();
       else if (exposures.has(exposure)) exposures.delete(exposure);
       else exposures.add(exposure);
-      // Apply each contribution once, so both click orders reach the same dimensions.
       const mode = exposures.size === 2 ? 'combined' : exposures.values().next().value || 'rest';
       viewer.dataset.mode = mode;
       buttons.forEach(button => {
         button.setAttribute('aria-pressed', String(exposures.has(button.dataset.exposure)));
       });
       status.textContent = descriptions[mode];
-      scene.setAttribute('aria-label', descriptions[mode]);
+      description.textContent = descriptions[mode];
+      animate(dimensions());
     }
     buttons.forEach(button => button.addEventListener('click', () => selectExposure(button.dataset.exposure)));
     document.querySelector('#reset').addEventListener('click', () => selectExposure('rest'));
+    reducedMotion.addEventListener('change', () => animate(dimensions()));
   </script>
 </body>
 </html>
