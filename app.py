@@ -1,5 +1,6 @@
 import streamlit as st
 import json
+import re
 import sys
 from importlib.util import module_from_spec, spec_from_file_location
 import numpy as np
@@ -23,6 +24,34 @@ render_inverse = sys.modules["_pcb_inverse_view"].render_inverse
 # Configuration & Constants
 # -----------------------------------------------------------------------------
 MOLAR_MASS_WATER = 0.018015  # kg/mol
+
+# LaTeX, rendered symbol, meaning and units shared by all home-page equations.
+EQUATION_SYMBOLS = {
+    "D": ("D", "D", "Moisture diffusivity", "m²/s"),
+    "h": ("h", "h", "Laminate thickness", "m"),
+    "t": ("t", "t", "Exposure time", "s"),
+    "z": ("z", "z", "Position through the laminate thickness", "m"),
+    "C": ("C", "C", "Local moisture concentration in the diffusion equation", "mol/m³"),
+    "uptake": (r"\frac{M_t}{M_\infty}", "M∞Mt", "Fractional moisture uptake relative to saturation", "Dimensionless"),
+    "n": ("n", "n", "Series summation index, starting at zero", "Dimensionless"),
+    "Csat": (r"C_{\mathrm{sat}}", "Csat", "Saturation moisture concentration", "mol/m³"),
+    "Ct": ("C_t", "Ct", "Average moisture concentration at time t", "mol/m³"),
+    "W": ("W_t", "Wt", "Absorbed moisture concentration by mass at time t", "kg/m³"),
+    "water_mass": (r"M_{\mathrm{H_2O}}", "MH2O", "Molar mass of water, 0.018015", "kg/mol"),
+    "beta": (r"\beta", "β", "Coefficient of hygroscopic expansion", "m³/kg"),
+    "alpha_lam": (r"\alpha_{\mathrm{lam}}", "αlam", "Laminate in-plane coefficient of thermal expansion", "ppm/K"),
+    "alpha_cu": (r"\alpha_{\mathrm{Cu}}", "αCu", "Copper coefficient of thermal expansion", "ppm/K"),
+    "T": ("T", "T", "Exposure temperature", "°C or K"),
+    "Tref": (r"T_{\mathrm{ref}}", "Tref", "Reference temperature, in the same units as T", "°C or K"),
+    "delta_T": (r"\Delta T", "ΔT", "Temperature change from the reference", "K or °C difference"),
+    "E": (r"E_{\mathrm{eff}}", "Eeff", "Effective modulus", "MPa"),
+    "nu": (r"\nu_{\mathrm{eff}}", "νeff", "Effective Poisson's ratio", "Dimensionless"),
+    "eps_h": (r"\varepsilon_h", "εh", "Hygroscopic swelling strain", "Dimensionless"),
+    "eps_T": (r"\varepsilon_T", "εT", "Thermal mismatch strain", "Dimensionless"),
+    "sigma_h": (r"\sigma_h", "σh", "Hygroscopic contribution to the stress index", "MPa"),
+    "sigma_T": (r"\sigma_T", "σT", "Thermal contribution to the stress index", "MPa"),
+    "sigma_index": (r"\sigma_{\mathrm{index}}", "σindex", "Combined stress index", "MPa"),
+}
 
 # Condition-specific laminate inputs extracted from Formula_sheet_V2.xlsx.
 # Store the inputs locally so running the app does not require the source workbook.
@@ -336,39 +365,64 @@ def render_style():
     """, unsafe_allow_html=True)
 
 
+def render_symbol_equation(equation):
+    # Group compound symbols so the entire term is one hover target in KaTeX.
+    equation = re.sub(r"\[\[(\w+)\]\]",
+                      lambda match: r"\mathord{" + EQUATION_SYMBOLS[match[1]][0] + "}", equation)
+    st.latex(equation)
+
+
+def render_equation_symbol_hints():
+    meanings = {symbol: {"meaning": meaning, "units": units}
+                for _, symbol, meaning, units in EQUATION_SYMBOLS.values()}
+    script = (Path(__file__).parent / "assets" / "equation_tooltips.js").read_text(encoding="utf-8")
+    st.html(Path(__file__).parent / "assets" / "equation_hovercards.css")
+    st.html("<script>\n(() => {\nconst meanings = " + json.dumps(meanings)
+            + ";\n" + script + "\n})();\n</script>", unsafe_allow_javascript=True)
+
+
 def render_home_stress_flow():
-    st.subheader("Moisture and Temperature Contributions to the Stress Index")
+    st.subheader("Combined Stress Index")
     st.write(
         "Moisture causes the laminate to swell, while temperature changes produce different degrees of "
         "expansion in the copper and laminate. Bonding restricts this relative movement, "
         "creating mechanical loading at their interface. The calculation below combines "
         "the two strain contributions through the laminate's effective in-plane stiffness."
     )
+    st.caption("Hover over or tap on a green symbol to see what it represents and its units.")
     moisture, thermal = st.columns(2, gap="large", border=True)
     with moisture.container(border=False, key="home_moisture_path"):
-        st.markdown("#### Moisture contribution")
-        st.markdown('<p class="flow-step">01 · MOISTURE UPTAKE</p>', unsafe_allow_html=True)
-        st.write("Diffusion sets the moisture absorbed at exposure time t.")
-        st.latex(r"C_t = \frac{M_t}{M_\infty}\,C_{\mathrm{sat}}, \qquad W(t) = C_t M_{\mathrm{H_2O}}")
+        with st.container(border=False, key="home_moisture_heading"):
+            st.markdown("#### Moisture contribution")
+        with st.container(border=False, key="home_moisture_step_1"):
+            st.markdown('<p class="flow-step">01 · MOISTURE UPTAKE</p>', unsafe_allow_html=True)
+            st.write("Diffusion sets the moisture absorbed at exposure time t.")
+            render_symbol_equation(r"[[Ct]] = [[uptake]]\,[[Csat]], \qquad [[W]] = [[Ct]] [[water_mass]]")
         st.markdown('<p class="flow-down" aria-hidden="true">↓</p>', unsafe_allow_html=True)
-        st.markdown('<p class="flow-step">02 · SWELLING STRAIN</p>', unsafe_allow_html=True)
-        st.write("Absorbed water causes the laminate to expand.")
-        st.latex(r"\varepsilon_h = \beta\,W(t)")
+        with st.container(border=False, key="home_moisture_step_2"):
+            st.markdown('<p class="flow-step">02 · SWELLING STRAIN</p>', unsafe_allow_html=True)
+            st.write("Absorbed water causes the laminate to expand.")
+            render_symbol_equation(r"[[eps_h]] = [[beta]]\,[[W]]")
         st.markdown('<p class="flow-down" aria-hidden="true">↓</p>', unsafe_allow_html=True)
-        st.markdown('<p class="flow-step">03 · STRESS-INDEX CONTRIBUTION</p>', unsafe_allow_html=True)
-        st.latex(r"\sigma_h = \frac{E_{\mathrm{eff}}}{1-\nu_{\mathrm{eff}}}\,\varepsilon_h")
+        with st.container(border=False, key="home_moisture_step_3"):
+            st.markdown('<p class="flow-step">03 · STRESS-INDEX CONTRIBUTION</p>', unsafe_allow_html=True)
+            render_symbol_equation(r"[[sigma_h]] = \frac{[[E]]}{1-[[nu]]}\,[[eps_h]]")
     with thermal.container(border=False, key="home_thermal_path"):
-        st.markdown("#### Thermal contribution")
-        st.markdown('<p class="flow-step">01 · TEMPERATURE CHANGE</p>', unsafe_allow_html=True)
-        st.write("Heating or cooling changes each material's dimensions.")
-        st.latex(r"\Delta T = T - T_{\mathrm{ref}}")
+        with st.container(border=False, key="home_thermal_heading"):
+            st.markdown("#### Thermal contribution")
+        with st.container(border=False, key="home_thermal_step_1"):
+            st.markdown('<p class="flow-step">01 · TEMPERATURE CHANGE</p>', unsafe_allow_html=True)
+            st.write("Heating or cooling changes each material's dimensions.")
+            render_symbol_equation(r"[[delta_T]] = [[T]] - [[Tref]]")
         st.markdown('<p class="flow-down" aria-hidden="true">↓</p>', unsafe_allow_html=True)
-        st.markdown('<p class="flow-step">02 · EXPANSION MISMATCH STRAIN</p>', unsafe_allow_html=True)
-        st.write("Different CTEs create a relative expansion strain.")
-        st.latex(r"\varepsilon_T = (\alpha_{\mathrm{lam}}-\alpha_{\mathrm{Cu}})\,\Delta T")
+        with st.container(border=False, key="home_thermal_step_2"):
+            st.markdown('<p class="flow-step">02 · EXPANSION MISMATCH STRAIN</p>', unsafe_allow_html=True)
+            st.write("Different CTEs create a relative expansion strain.")
+            render_symbol_equation(r"[[eps_T]] = ([[alpha_lam]]-[[alpha_cu]])\,[[delta_T]]")
         st.markdown('<p class="flow-down" aria-hidden="true">↓</p>', unsafe_allow_html=True)
-        st.markdown('<p class="flow-step">03 · STRESS-INDEX CONTRIBUTION</p>', unsafe_allow_html=True)
-        st.latex(r"\sigma_T = \frac{E_{\mathrm{eff}}}{1-\nu_{\mathrm{eff}}}\,\varepsilon_T")
+        with st.container(border=False, key="home_thermal_step_3"):
+            st.markdown('<p class="flow-step">03 · STRESS-INDEX CONTRIBUTION</p>', unsafe_allow_html=True)
+            render_symbol_equation(r"[[sigma_T]] = \frac{[[E]]}{1-[[nu]]}\,[[eps_T]]")
 
     st.markdown('''
         <div class="flow-merge">
@@ -385,55 +439,26 @@ def render_home_stress_flow():
     ''', unsafe_allow_html=True)
     with st.container(border=True, key="home_combined_index"):
         st.markdown("#### Combined stress index")
-        st.latex(
-            r"\sigma_{\mathrm{index}} = \sigma_h + \sigma_T"
-            r" = \frac{E_{\mathrm{eff}}}{1-\nu_{\mathrm{eff}}}"
-            r"\left(\varepsilon_h + \varepsilon_T\right)"
+        render_symbol_equation(
+            r"[[sigma_index]] = [[sigma_h]] + [[sigma_T]]"
+            r" = \frac{[[E]]}{1-[[nu]]}"
+            r"\left([[eps_h]] + [[eps_T]]\right)"
         )
         st.write("A signed measure of the constrained in-plane response for comparing materials and exposure conditions.")
         st.caption("The two contributions can reinforce or offset each other, depending on the direction of the thermal mismatch.")
 
-    with st.expander("Moisture uptake model & equation symbols"):
+    with st.expander("Moisture uptake model"), st.container(border=False, key="home_uptake_model"):
         st.write("For one-dimensional diffusion through a plane sheet of thickness h, "
                  "Fick's second law gives the fractional moisture uptake used in the swelling path.")
-        st.latex(r"\frac{\partial C}{\partial t} = D\frac{\partial^2 C}{\partial z^2}")
-        st.latex(
-            r"\frac{M_t}{M_\infty} = 1-\frac{8}{\pi^2}"
-            r"\sum_{n=0}^{\infty}\frac{1}{(2n+1)^2}"
-            r"\exp\!\left[-\frac{(2n+1)^2\pi^2 D t}{h^2}\right]"
+        render_symbol_equation(r"\frac{\partial [[C]]}{\partial [[t]]} = [[D]]\frac{\partial^2 [[C]]}{\partial [[z]]^2}")
+        render_symbol_equation(
+            r"[[uptake]] = 1-\frac{8}{\pi^2}"
+            r"\sum_{[[n]]=0}^{\infty}\frac{1}{(2[[n]]+1)^2}"
+            r"\exp\!\left[-\frac{(2[[n]]+1)^2\pi^2 [[D]] [[t]]}{[[h]]^2}\right]"
         )
         st.caption("The plane-sheet solution assumes an initially dry laminate, "
                    "constant diffusivity and constant surface moisture concentration.")
-        st.markdown(r"""
-| Symbol | Meaning | Units |
-| :--- | :--- | :--- |
-| $D$ | Moisture diffusivity | m²/s |
-| $h$ | Laminate thickness | m |
-| $t$ | Exposure time | s |
-| $z$ | Position through the laminate thickness | m |
-| $C$ | Local moisture concentration in the diffusion equation | mol/m³ |
-| $M_t/M_\infty$ | Fractional moisture uptake relative to saturation | Dimensionless |
-| $n$ | Series summation index, starting at zero | Dimensionless |
-| $C_{\mathrm{sat}}$ | Saturation moisture concentration | mol/m³ |
-| $C_t$ | Average moisture concentration at time $t$ | mol/m³ |
-| $W(t)$ | Absorbed moisture concentration by mass at time $t$ | kg/m³ |
-| $M_{\mathrm{H_2O}}$ | Molar mass of water, 0.018015 | kg/mol |
-| $\beta$ | Coefficient of hygroscopic expansion | m³/kg |
-| $\alpha_{\mathrm{lam}}$ | Laminate in-plane coefficient of thermal expansion | ppm/K |
-| $\alpha_{\mathrm{Cu}}$ | Copper coefficient of thermal expansion | ppm/K |
-| $T$ | Exposure temperature | °C or K |
-| $T_{\mathrm{ref}}$ | Reference temperature, in the same units as $T$ | °C or K |
-| $\Delta T$ | Temperature change from the reference | K or °C difference |
-| $E_{\mathrm{eff}}$ | Effective modulus | MPa |
-| $\nu_{\mathrm{eff}}$ | Effective Poisson's ratio | Dimensionless |
-| $\varepsilon_h$ | Hygroscopic swelling strain | Dimensionless |
-| $\varepsilon_T$ | Thermal mismatch strain | Dimensionless |
-| $\sigma_h$ | Hygroscopic contribution to the stress index | MPa |
-| $\sigma_T$ | Thermal contribution to the stress index | MPa |
-| $\sigma_{\mathrm{index}}$ | Combined stress index | MPa |
-""")
-        st.caption("The factor 10⁻⁶ converts CTE values from ppm/K to K⁻¹.")
-        st.caption("The stiffness factor Eeff/(1 − νeff) represents an effective linear-elastic, equibiaxial in-plane constraint.")
+    render_equation_symbol_hints()
 
 
 STRESS_ANALYSER_ICON = (

@@ -232,7 +232,7 @@ def render_inverse(records):
                "a material or assessing delamination risk. A small net index can also reflect cancellation "
                "between hygroscopic and thermal contributions.")
     with st.expander("Feasibility rule and sampled properties"):
-        st.latex(r"\left|\frac{E}{1-\nu}\left[\beta W(t)+(\alpha_{\mathrm{lam}}-\alpha_{\mathrm{Cu}})10^{-6}\Delta T\right]\right|"
+        st.latex(r"\left|\frac{E}{1-\nu}\left[\beta W_t+(\alpha_{\mathrm{lam}}-\alpha_{\mathrm{Cu}})10^{-6}\Delta T\right]\right|"
                  r"\leq \sigma_{\mathrm{limit}}")
         st.dataframe(space.head(500), hide_index=True, width="stretch")
         st.download_button("Download sampled property space (CSV)", space.to_csv(index=False).encode(),

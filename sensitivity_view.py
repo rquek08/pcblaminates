@@ -197,7 +197,7 @@ def render_results(result, config, signature):
         st.dataframe(result["samples"].head(500), hide_index=True, width="stretch")
         st.caption(f"Preview of the first 500 of {len(result['samples']):,} model evaluations. Downloads include all rows.")
         st.markdown("#### Model and method")
-        st.latex(r"\sigma_{\mathrm{index}}=\frac{E}{1-\nu}\left[\beta W(t)+(\alpha_{\mathrm{lam}}-\alpha_{\mathrm{Cu}})\Delta T\right]")
+        st.latex(r"\sigma_{\mathrm{index}}=\frac{E}{1-\nu}\left[\beta W_t+(\alpha_{\mathrm{lam}}-\alpha_{\mathrm{Cu}})\Delta T\right]")
         st.write("The default response is the magnitude of this signed index. Uptake starts dry and uses "
                  "one-dimensional plane-sheet diffusion with both faces exposed. Moisture uptake is calculated "
                  "from diffusivity, time, and thickness; Csat sets equilibrium concentration.")
