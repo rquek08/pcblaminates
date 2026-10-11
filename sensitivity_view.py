@@ -57,7 +57,7 @@ def render_sensitivity(simulation_scenario):
         keys = st.multiselect("Parameters to vary", allowed, default=allowed,
                               format_func=lambda key: PARAMETERS[key][0], key=f"sens_parameters_{group}", persist_state="session")
         st.caption("Moisture uptake is represented by saturation concentration Csat and diffusivity D. "
-                   "Copper CTE remains fixed. Poisson's ratio can be varied in material and combined studies. "
+                   "Copper CTE remains fixed. "
                    "Input distributions are independent.")
 
         if group == 0:
