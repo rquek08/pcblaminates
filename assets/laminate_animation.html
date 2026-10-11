@@ -39,10 +39,8 @@
     .original-outline { fill: none; stroke: #778b80; stroke-width: 1.3; stroke-dasharray: 5 5; opacity: .65; }
     .viewer[data-mode="moisture"] { --stress-color: #368575; }
     .viewer[data-mode="heat"] { --stress-color: #b57349; }
-    .bond-stop { stop-color: var(--stress-color); }
-    .interface-highlight { stroke: url(#bond-highlight); stroke-width: 5; }
-    .interface-force { fill: none; stroke: currentColor; stroke-width: 1.8; marker-end: url(#interface-arrowhead); }
-    #interface-forces { color: var(--stress-color); pointer-events: none; }
+    .restraint-arrow { fill: none; stroke: currentColor; stroke-width: 3; marker-end: url(#restraint-arrowhead); }
+    #restraint-arrows { color: var(--stress-color); pointer-events: none; }
     .bond-caption { fill: #60756d; font-size: 10px; letter-spacing: .7px; }
     .legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 18px; font-size: 12px; margin: 0 0 16px; }
     .legend span { display: flex; align-items: center; gap: 6px; }
@@ -50,7 +48,7 @@
     .mask-swatch { background: #368575; }
     .laminate-swatch { background: #dce8cd; border: 1px solid #a5ba97; }
     .outline-swatch { background: transparent; border: 1px dashed #778b80; }
-    .stress-swatch { background: #7f8165; height: 4px; }
+    .arrow-swatch { color: #7f8165; font-size: 20px; line-height: 12px; }
     #status { min-height: 64px; font-size: 14px; line-height: 1.5; margin: 0 0 10px; }
     .note { font-size: 11px; }
     @media (max-width: 420px) {
@@ -72,24 +70,18 @@
     </div>
     <svg class="scene" viewBox="0 0 520 320" xmlns="http://www.w3.org/2000/svg"
          role="img" aria-labelledby="stack-title stack-description">
-      <title id="stack-title">Bonded PCB layers and expansion-mismatch forces</title>
+      <title id="stack-title">Bonded PCB layers and restrained expansion</title>
       <desc id="stack-description">Bonded stack: copper and laminate share the same in-plane deformation at each interface.</desc>
       <defs>
         <pattern id="fibreglass" width="12" height="12" patternUnits="userSpaceOnUse">
           <path d="M0 0H12M0 0V12" fill="none" stroke="#9db78d" stroke-width=".8" opacity=".25" />
         </pattern>
-        <linearGradient id="bond-highlight">
-          <stop class="bond-stop" offset="0" stop-opacity=".9" />
-          <stop class="bond-stop" offset=".25" stop-opacity=".25" />
-          <stop class="bond-stop" offset=".75" stop-opacity=".25" />
-          <stop class="bond-stop" offset="1" stop-opacity=".9" />
-        </linearGradient>
-        <marker id="interface-arrowhead" viewBox="0 0 6 6" refX="6" refY="3"
-                markerWidth="6" markerHeight="6" markerUnits="userSpaceOnUse" orient="auto">
-          <path id="arrow-tip" d="M0 0L6 3L0 6Z" fill="#7f8165" />
+        <marker id="restraint-arrowhead" viewBox="0 0 8 8" refX="8" refY="4"
+                markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+          <path id="arrow-tip" d="M0 0L8 4L0 8Z" fill="#7f8165" />
         </marker>
       </defs>
-      <text class="diagram-heading" x="260" y="25">TWO COPPER LAYERS · BONDED STACK</text>
+      <text class="diagram-heading" x="260" y="25">BONDED STACK · TWO COPPER LAYERS</text>
       <g id="mask-top" class="layer mask">
         <rect x="85" y="73" width="350" height="18" />
         <text x="260" y="82">Solder mask</text>
@@ -112,34 +104,24 @@
         <text x="260" y="248">Solder mask</text>
       </g>
       <rect class="original-outline" x="85" y="73" width="350" height="184" />
-      <g id="interface-forces" opacity="0" aria-hidden="true">
-        <g id="interface-top">
-          <line class="interface-highlight" />
-          <path class="interface-force" data-side="left" data-material="copper" />
-          <path class="interface-force" data-side="right" data-material="copper" />
-          <path class="interface-force" data-side="left" data-material="core" />
-          <path class="interface-force" data-side="right" data-material="core" />
-        </g>
-        <g id="interface-bottom">
-          <line class="interface-highlight" />
-          <path class="interface-force" data-side="left" data-material="copper" />
-          <path class="interface-force" data-side="right" data-material="copper" />
-          <path class="interface-force" data-side="left" data-material="core" />
-          <path class="interface-force" data-side="right" data-material="core" />
-        </g>
+      <g id="restraint-arrows" opacity="0" aria-hidden="true">
+        <path class="restraint-arrow" data-side="left" data-row="primary" />
+        <path class="restraint-arrow" data-side="right" data-row="primary" />
+        <path class="restraint-arrow" data-side="left" data-row="bottom" />
+        <path class="restraint-arrow" data-side="right" data-row="bottom" />
       </g>
-      <text class="bond-caption" x="260" y="300">BONDED INTERFACES · NO SLIP OR SEPARATION</text>
+      <text id="restraint-caption" class="bond-caption" x="260" y="300">BONDED LAYERS · SHARED EXPANSION</text>
     </svg>
     <div class="legend" aria-hidden="true">
       <span><i class="swatch mask-swatch"></i>Solder mask</span>
       <span><i class="swatch"></i>Copper</span>
       <span><i class="swatch laminate-swatch"></i>Laminate</span>
       <span><i class="swatch outline-swatch"></i>Original size</span>
-      <span><i class="swatch stress-swatch"></i>Interface forces</span>
+      <span><span class="arrow-swatch">→</span>Expansion restraint</span>
     </div>
     <p id="status" role="status" aria-live="polite">Bonded stack: copper and laminate share the same in-plane deformation at each interface.</p>
-    <p class="note">Qualitative bonded-stack schematic, exaggerated and not to scale. Highlights and arrows
-      illustrate interface stress transfer, not calculated stress magnitudes or distributions.
+    <p class="note">Qualitative bonded-stack schematic, exaggerated and not to scale. Inward arrows show
+      restraint by the adjacent bonded material, rather than an external load. Arrow size does not represent stress magnitude.
       Coatings follow the stack; their own expansion is not modelled.</p>
   </section>
   <script>
@@ -153,17 +135,15 @@
       const group = document.getElementById(id);
       return {rectangles: group.querySelectorAll('rect'), label: group.querySelector('text')};
     });
-    const forces = document.querySelector('#interface-forces');
+    const restraint = document.querySelector('#restraint-arrows');
+    const arrows = restraint.querySelectorAll('path');
+    const restraintCaption = document.querySelector('#restraint-caption');
     const arrowTip = document.querySelector('#arrow-tip');
-    const interfaces = ['interface-top', 'interface-bottom'].map(id => {
-      const group = document.getElementById(id);
-      return {highlight: group.querySelector('line'), arrows: group.querySelectorAll('path')};
-    });
     const descriptions = {
       rest: 'Bonded stack: copper and laminate share the same in-plane deformation at each interface.',
-      moisture: 'Moisture: the core tends to swell. Bonding restrains its expansion and pulls the copper layers, transferring opposing forces across the interfaces.',
-      heat: 'Heat: copper tends to expand more than the core in this example. Bonding restrains the copper and stretches the core, transferring opposing interface forces.',
-      combined: 'Heat + moisture: moisture swelling and thermal mismatch oppose one another in this example. Their net mismatch still loads the bonded interfaces.'
+      moisture: 'Moisture: the laminate swells, while the bonded copper layers limit its expansion. The inward arrows show this restraint on the laminate.',
+      heat: 'Heat: copper tends to expand more than the laminate in this example. The inward arrows at both copper layers show their expansion being restrained by the laminate.',
+      combined: 'Heat + moisture: moisture swelling partly offsets the thermal mismatch in this example. The laminate still tends to expand more overall, so the arrows show its restraint by the copper.'
     };
 
     function dimensions() {
@@ -194,26 +174,25 @@
         layers[i].label.setAttribute('y', row.y + row.height / 2);
       });
       const core = rows[2];
-      // Equal-and-opposite tangential interface forces. Their direction flips
-      // when the material wanting more free expansion changes.
-      forces.setAttribute('opacity', Math.min(1, Math.abs(core.mismatch) / .015));
+      // Show one pair on the laminate or one pair on each copper layer,
+      // depending on which material wants more expansion. These are not external loads.
+      restraint.setAttribute('opacity', Math.min(1, Math.abs(core.mismatch) / .015));
       const color = {moisture: '#368575', heat: '#b57349'}[viewer.dataset.mode] || '#7f8165';
       arrowTip.setAttribute('fill', color);
-      interfaces.forEach((boundary, i) => {
-        const y = i === 0 ? core.y : core.y + core.height;
-        boundary.highlight.setAttribute('x1', core.x);
-        boundary.highlight.setAttribute('x2', core.x + core.width);
-        boundary.highlight.setAttribute('y1', y);
-        boundary.highlight.setAttribute('y2', y);
-        boundary.arrows.forEach(arrow => {
-          const side = arrow.dataset.side === 'left' ? -1 : 1;
-          const isCopper = arrow.dataset.material === 'copper';
-          const direction = side * (isCopper ? 1 : -1) * Math.sign(core.mismatch);
-          const x = side < 0 ? core.x + 32 : core.x + core.width - 32;
-          const arrowY = y + (i === 0 ? 1 : -1) * (isCopper ? -7 : 7);
-          arrow.setAttribute('d', `M${x - direction * 11} ${arrowY}H${x + direction * 11}`);
-        });
+      const copperRestrained = core.mismatch < 0;
+      arrows.forEach(arrow => {
+        const bottom = arrow.dataset.row === 'bottom';
+        arrow.setAttribute('visibility', bottom && !copperRestrained ? 'hidden' : 'visible');
+        const restrainedLayer = copperRestrained ? rows[bottom ? 3 : 1] : core;
+        const arrowY = restrainedLayer.y + restrainedLayer.height / 2;
+        const left = arrow.dataset.side === 'left';
+        const edge = left ? core.x : core.x + core.width;
+        const direction = left ? 1 : -1;
+        arrow.setAttribute('d', `M${edge - direction * 36} ${arrowY}H${edge - direction * 8}`);
       });
+      restraintCaption.textContent = Math.abs(core.mismatch) < .001
+        ? 'BONDED LAYERS · SHARED EXPANSION'
+        : core.mismatch > 0 ? 'COPPER RESTRAINS LAMINATE EXPANSION' : 'LAMINATE RESTRAINS COPPER EXPANSION';
     }
 
     let current = dimensions();
