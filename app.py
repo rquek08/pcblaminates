@@ -596,40 +596,37 @@ def render_simulation_inputs():
         render_exploration_icon(STRESS_ANALYSER_ICON)
         st.title("Stress Analyser")
     st.caption("Choose your material and exposure conditions, then follow the calculation from uptake to stress.")
-    structure, inputs = st.columns([1, 1.05], gap="large")
-    with inputs.container(border=True, key="simulation_scenario"):
-        st.markdown('<h3 class="scenario-section-heading">Exposure &amp; Geometry</h3>', unsafe_allow_html=True)
-        temperature, duration = st.columns(2)
-        delta_T = temperature.number_input("Delta T (°C or K)", key="field_delta_T", step=5.0)
-        t_hours = duration.number_input("Soak Time (hours)", min_value=0.0, key="field_t_hours", step=1.0)
-        thickness, copper = st.columns(2)
-        h_mm = thickness.number_input("Laminate Thickness (mm)", min_value=0.001, key="field_h_mm", step=0.1)
-        alpha_cu = copper.number_input("Copper Foil CTE (ppm/K)", key="field_alpha_cu", step=0.5)
+    structure, inputs = st.columns([1.65, 1], gap="large")
+    with inputs.container(border=True, height="stretch", key="simulation_scenario"):
+        st.markdown('<h3 class="scenario-section-heading">Exposure</h3>', unsafe_allow_html=True)
+        delta_T = st.number_input("Change in Temperature (°C or K)", key="field_delta_T", step=5.0)
+        t_hours = st.number_input("Soak Time (hours)", min_value=0.0, key="field_t_hours", step=1.0)
+
+        st.markdown('<h3 class="scenario-section-heading">Geometry</h3>', unsafe_allow_html=True)
+        h_mm = st.number_input("Laminate Thickness (mm)", min_value=0.001, key="field_h_mm", step=0.1)
 
         st.markdown('<h3 class="scenario-section-heading">Material Properties</h3>', unsafe_allow_html=True)
-        mechanical, hygroscopic = st.columns(2, gap="large")
-        with mechanical:
-            st.markdown('<h4 class="scenario-property-heading">Mechanical Properties</h4>', unsafe_allow_html=True)
-            E = st.number_input("Young's Modulus E (MPa)", min_value=0.001, key="field_E", step=500.0)
-            nu = st.number_input("Poisson's Ratio ν", min_value=-0.99, max_value=0.499,
-                                 key="field_nu", step=0.01, format="%.3f")
-            alpha_lam = st.number_input("In-Plane CTE α (ppm/K)", key="field_alpha_lam", step=0.5)
-        with hygroscopic:
-            st.markdown('<h4 class="scenario-property-heading">Hygroscopic Properties</h4>', unsafe_allow_html=True)
-            D = st.number_input("Diffusion Coefficient D (m²/s)", min_value=0.0, key="field_D",
-                                step=1e-14, format="%.2e",
-                                help="Effective Fickian diffusivity at chamber temperature.")
-            Csat = st.number_input("Saturation Concentration Csat (mol/m³)", min_value=0.0,
-                                   key="field_Csat", step=10.0,
-                                   help="Csat ≈ (WA% / 100) * (Density / 0.018015)")
-            beta = st.number_input("In-Plane CHE β (m³/kg)", min_value=0.0,
-                                   key="field_beta", step=1e-5, format="%.2e",
-                                   help="In-plane coefficient of hygroscopic expansion.")
+        st.markdown('<h4 class="scenario-property-heading">Mechanical Properties</h4>', unsafe_allow_html=True)
+        E = st.number_input("Young's Modulus E (MPa)", min_value=0.001, key="field_E", step=500.0)
+        nu = st.number_input("Poisson's Ratio ν", min_value=-0.99, max_value=0.499,
+                             key="field_nu", step=0.01, format="%.3f")
+        alpha_lam = st.number_input("In-Plane CTE α (ppm/K)", key="field_alpha_lam", step=0.5)
+        alpha_cu = st.number_input("Copper Foil CTE (ppm/K)", key="field_alpha_cu", step=0.5)
+        st.markdown('<h4 class="scenario-property-heading">Hygroscopic Properties</h4>', unsafe_allow_html=True)
+        D = st.number_input("Diffusion Coefficient D (m²/s)", min_value=0.0, key="field_D",
+                            step=1e-14, format="%.2e",
+                            help="Effective Fickian diffusivity at chamber temperature.")
+        Csat = st.number_input("Saturation Concentration Csat (mol/m³)", min_value=0.0,
+                               key="field_Csat", step=10.0,
+                               help="Csat ≈ (WA% / 100) * (Density / 0.018015)")
+        beta = st.number_input("In-Plane CHE β (m³/kg)", min_value=0.0,
+                               key="field_beta", step=1e-5, format="%.2e",
+                               help="In-plane coefficient of hygroscopic expansion.")
 
         with st.container(horizontal=True, horizontal_alignment="right"):
             calculate = st.button("Calculate", type="primary", key="calculate_simulation")
 
-    with structure.container(border=True, key="simulation_structure"):
+    with structure.container(border=True, height="stretch", key="simulation_structure"):
         st.markdown('<h2 class="scenario-title">Choose your laminate</h2>', unsafe_allow_html=True)
         st.caption("Start with a preset or enter your own properties. ")
         st.selectbox("Material Preset", list(PRESETS), key="preset_selector",

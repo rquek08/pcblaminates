@@ -22,4 +22,3 @@ def render_stack(material, thickness_mm, laminate_cte, copper_cte):
     st.iframe(stack_html(material, thickness_mm, laminate_cte, copper_cte,
                          "upper" if interface.startswith("Upper") else "lower"), height="content")
     st.caption("Illustrative four-layer PCB, not a manufacturer stack-up. The selected material supplies the core properties.")
-    st.caption("Current moisture calculation: two exposed laminate faces. Copper barriers and edge entry are not included.")
