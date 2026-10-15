@@ -3,22 +3,43 @@ import hashlib
 import json
 
 import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
 from sensitivity_analysis import (
     EXPOSURE, FIXED_META, MATERIAL, OUTPUTS, PARAMETERS, STUDIES,
-    default_ranges, excel_report, reference_baseline, run_analysis,
+    default_ranges, excel_report, material_ranges, run_analysis,
 )
 
 
 @st.cache_data(show_spinner=False, max_entries=6)
 def calculate(config):
     return run_analysis(config["baseline"], config["ranges"], config["diffusion"],
-                        config["target"], config["N"], config["seed"])
+                        config["target"], config["N"], config["seed"],
+                        config["method"], config["trajectories"])
 
 
-def render_sensitivity(simulation_scenario):
+def render_nominal_inputs(name, values):
+    """Own widget namespace: no Stress Analyser state is read or changed."""
+    scope = hashlib.sha256(name.encode()).hexdigest()[:12]
+    p = dict(values)
+    columns = st.columns(3)
+    for i, (key, (label, unit)) in enumerate(FIXED_META.items()):
+        options = dict(value=float(p[key]), key=f"sens_nominal_{scope}_{key}", persist_state="session")
+        if key in ("D", "beta"):
+            options.update(min_value=0.0, format="%.3e")
+        elif key in ("Csat", "t_hours"):
+            options.update(min_value=0.0)
+        elif key in ("E", "h_mm"):
+            options.update(min_value=0.001)
+        elif key == "nu":
+            options.update(min_value=-0.99, max_value=0.499, format="%.3f", step=0.01)
+        p[key] = columns[i % 3].number_input(f"{label} ({unit})", **options)
+    return p
+
+
+def render_sensitivity(records):
     st.session_state["sensitivity_current_signature"] = None
     with st.container(horizontal=True, wrap=False, vertical_alignment="center",
                       gap="small", key="sensitivity_analysis_header"):
@@ -27,48 +48,61 @@ def render_sensitivity(simulation_scenario):
             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
             'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
             '<path d="M4 3v17h17M9 16V9M14 16V5M19 16v-4" />'
-            '</svg></div>',
-            unsafe_allow_html=True, width="content",
+            '</svg></div>', unsafe_allow_html=True, width="content",
         )
         st.title("Sensitivity Analysis")
-    st.caption("Explore how material properties and exposure conditions influence the calculated stress index using Sobol sensitivity analysis.")
-    if st.session_state.get("sens_source") == "Notebook reference values":
-        st.session_state["sens_source"] = "Default reference scenario"
+    st.caption("Choose materials and study how exposure conditions or property variations affect moisture uptake, swelling and stress.")
+    presets = {r["name"]: r for r in records}
+    custom = "Custom material / manual entry"
+    custom_values = dict(E=25000., nu=.2, alpha_lam=12., alpha_cu=16.5,
+                         D=1e-12, Csat=150., beta=1e-4, h_mm=1.6, t_hours=24., delta_T=60.)
     with st.container(border=True):
-        study = st.radio("Study", STUDIES, horizontal=True, key="sens_study", persist_state="session")
-        source, output = st.columns(2)
-        with source:
-            baseline_source = st.selectbox("Starting scenario",
-                                           ["Default reference scenario", "Stress analyser scenario"], key="sens_source", persist_state="session",
-                                           help="Use a built-in example scenario or your most recent Stress Analyser inputs. "
-                                                "Selected parameters vary over their ranges; the other inputs stay fixed.")
-        with output:
-            target = st.selectbox("Response to analyse", list(OUTPUTS),
-                                  format_func=lambda key: f"{OUTPUTS[key][0]} ({OUTPUTS[key][1]})",
-                                  key="sens_output", persist_state="session")
-        p = reference_baseline(study) if baseline_source == "Default reference scenario" else dict(simulation_scenario)
-        if baseline_source == "Default reference scenario":
-            st.caption("The default reference scenario is a built-in example. "
-                       "View or edit its unvaried properties under Fixed inputs for this study.")
+        scope = st.segmented_control("Material selection mode", ["One material", "Compare materials"],
+                                     default="One material", required=True, label_visibility="collapsed",
+                                     key="sens_scope", persist_state="session")
+        if scope == "One material":
+            names = [st.selectbox("Material preset", [*presets, custom], key="sens_preset", persist_state="session")]
         else:
-            st.caption("Start from your most recent Stress Analyser inputs. "
-                       "Selected parameters vary over their ranges; all other inputs remain fixed and editable below.")
+            names = st.multiselect("Material presets to compare (up to four)", list(presets),
+                                   default=list(presets)[:2], max_selections=4,
+                                   key="sens_compare_presets", persist_state="session")
+        st.caption("Each preset identifies its material and conditioning environment.")
+        if not names:
+            st.info("Choose at least one material.")
+            return
+        study = st.radio("Study", STUDIES, index=1, horizontal=True, key="sens_study", persist_state="session")
+        method_col, output_col = st.columns(2)
+        method = method_col.selectbox("Analysis method", ["Sobol", "Morris"], key="sens_method", persist_state="session")
+        target = output_col.selectbox("Response to analyse", list(OUTPUTS),
+                                      format_func=lambda key: f"{OUTPUTS[key][0]} ({OUTPUTS[key][1]})",
+                                      key="sens_output", persist_state="session")
+        st.caption("Sobol estimates contributions to response variance. Morris screens influence using one-at-a-time trajectories.")
+        range_mode = st.radio("Parameter ranges", ["Around each material", "Broad exploratory ranges"],
+                              horizontal=True, key="sens_range_basis", persist_state="session")
+        percent, factor = 10.0, 2.0
+        if range_mode == "Around each material":
+            width_col, factor_col = st.columns(2)
+            percent = width_col.number_input("Variation around nominal values (±%)", min_value=0.1,
+                                             max_value=99.0, value=10.0, key="sens_percent", persist_state="session")
+            factor = factor_col.number_input("Diffusivity factor (divide / multiply)", min_value=1.01,
+                                              value=2.0, key="sens_D_factor", persist_state="session")
+            st.caption("Assumed screening ranges, not measured tolerances. D uses a log-uniform range; "
+                       "other selected inputs use uniform ranges. Bounds remain editable below.")
+        else:
+            st.caption("Explore the same broad bounds for every material. Varied properties use those bounds, "
+                       "rather than the preset's nominal values.")
         group = STUDIES.index(study)
         allowed = EXPOSURE if group == 0 else MATERIAL if group == 1 else list(PARAMETERS)
-        keys = st.multiselect("Parameters to vary", allowed, default=allowed,
-                              format_func=lambda key: PARAMETERS[key][0], key=f"sens_parameters_{group}", persist_state="session")
-        st.caption("Moisture uptake is represented by saturation concentration Csat and diffusivity D. "
-                   "Copper CTE remains fixed. "
-                   "Input distributions are independent.")
-
+        defaults = [key for key in allowed if key != "nu"] if range_mode == "Around each material" else allowed
+        keys = st.multiselect("Parameters to vary", allowed, default=defaults,
+                              format_func=lambda key: PARAMETERS[key][0],
+                              key=f"sens_parameters_{group}_{range_mode}", persist_state="session")
+        st.caption("Unselected inputs remain fixed at their nominal values. Copper CTE stays fixed. "
+                   "The selected input distributions are independent.")
+        mode = "Fixed D"
         if group == 0:
-            mode = st.radio("Diffusivity model", ["Arrhenius", "Fixed D"], horizontal=True, key="sens_diffusion", persist_state="session")
-            st.caption("With Arrhenius diffusion, temperature changes both diffusivity and thermal mismatch. "
-                       "Fixed D changes only the thermal branch when ΔT varies.")
-        else:
-            mode = "Fixed D"
-            st.caption("Effective diffusivity is varied directly. "
-                       "Temperature affects the thermal branch; D has no additional temperature dependence in this study.")
+            mode = st.radio("Diffusivity model", ["Fixed D", "Arrhenius"], horizontal=True,
+                            key="sens_diffusion_model", persist_state="session")
         diffusion = {"mode": mode}
         if mode == "Arrhenius":
             with st.expander("Temperature-dependent diffusion constants", expanded=True):
@@ -78,93 +112,158 @@ def render_sensitivity(simulation_scenario):
                 diffusion["Ea"] = ea.number_input("Activation energy (J/mol)", min_value=0.0,
                                                  value=37560.0, step=100.0, key="sens_Ea", persist_state="session")
                 diffusion["T_ref_C"] = tref.number_input("Reference temperature (°C)", min_value=-273.14,
-                                                        value=25.0, step=1.0, key="sens_T_ref_C", persist_state="session")
-                st.caption("Exposure temperature = reference temperature + ΔT. "
-                           "The diffusion constants are editable starting values.")
+                                                        value=25.0, key="sens_T_ref_C", persist_state="session")
+                st.caption("D is calculated from reference temperature + ΔT, replacing the preset's D. "
+                           "These editable diffusion constants apply to every material in this run; they are illustrative.")
+        else:
+            st.caption("D uses the preset value or its edited bounds. ΔT affects thermal mismatch only; "
+                       "humidity is represented by the chosen conditioning preset.")
 
-        scope = hashlib.sha256(json.dumps(dict(study=study, source=baseline_source, baseline=p),
-                                          sort_keys=True).encode()).hexdigest()[:12]
-        fixed = [key for key in FIXED_META if key not in keys and not (key == "D" and mode == "Arrhenius")]
-        with st.expander("Fixed inputs for this study"):
-            columns = st.columns(3)
-            for i, key in enumerate(fixed):
-                label, unit = FIXED_META[key]
-                options = dict(value=float(p[key]), key=f"sens_fixed_{scope}_{key}", persist_state="session")
-                if key in ("D", "beta"):
-                    options.update(min_value=0.0, format="%.3e")
-                elif key in ("Csat", "t_hours"):
-                    options.update(min_value=0.0)
-                elif key in ("E", "h_mm"):
-                    options.update(min_value=0.001)
-                elif key == "nu":
-                    options.update(min_value=-0.99, max_value=0.499, format="%.3f", step=0.01)
-                p[key] = columns[i % 3].number_input(f"{label} ({unit})", **options)
-            st.caption("Inputs excluded from the varied parameter list use these fixed values.")
-
-        st.markdown("#### Parameter ranges")
-        st.caption("Ranges use ppm/K for CTE, MPa for modulus, hours for exposure and mm for thickness; "
-                   "Poisson's ratio is dimensionless. Edit these exploratory bounds for your intended study.")
+        baselines = {}
+        with st.expander("Nominal material and exposure inputs", expanded=custom in names):
+            st.caption("Edit nominal values here. Selected parameters vary over the bounds below; all others stay fixed. "
+                       "For comparisons, each material has its own inputs and bounds.")
+            for name, tab in zip(names, st.tabs(names)):
+                with tab:
+                    values = custom_values if name == custom else presets[name]["properties"]
+                    baselines[name] = render_nominal_inputs(name, values)
         if not keys:
             st.info("Select at least one parameter to set up a sensitivity study.")
             return
-        editor_key = f"sens_ranges_{group}_{'_'.join(keys)}"
+        initial = {}
+        for name in names:
+            try:
+                initial[name] = (material_ranges(keys, baselines[name], percent, factor)
+                                 if range_mode == "Around each material" else default_ranges(keys))
+            except ValueError as exc:
+                st.info(f"{name}: {exc}")
+                return
+        st.markdown("#### Parameter ranges")
+        st.caption("CTE: ppm/K · modulus: MPa · exposure: hours · thickness: mm. "
+                   "Comparison rankings depend on each material's displayed ranges and fixed inputs.")
         saved_ranges = st.session_state.setdefault("sensitivity_range_values", {})
+        editors, ranges = {}, {}
         with st.form("sens_run_form"):
-            ranges = st.data_editor(
-                saved_ranges.get(editor_key, default_ranges(keys)), hide_index=True, width="stretch",
-                disabled=["Parameter", "Label", "Unit"],
-                column_config={
-                    "Parameter": None,
-                    "Label": st.column_config.TextColumn("Parameter"),
-                    "Lower": st.column_config.NumberColumn("Lower bound", format="%.4g", required=True),
-                    "Upper": st.column_config.NumberColumn("Upper bound", format="%.4g", required=True),
-                    "Distribution": st.column_config.SelectboxColumn(options=["uniform", "log-uniform"], required=True),
-                }, key=editor_key,
-            )
+            for name, tab in zip(names, st.tabs(names)):
+                with tab:
+                    fingerprint = json.dumps(dict(name=name, study=study, basis=range_mode,
+                                                  initial=initial[name].to_dict("records")), sort_keys=True)
+                    editor_key = "sens_ranges_" + hashlib.sha256(fingerprint.encode()).hexdigest()[:16]
+                    editors[name] = editor_key
+                    ranges[name] = st.data_editor(
+                        saved_ranges.get(editor_key, initial[name]), hide_index=True, width="stretch",
+                        disabled=["Parameter", "Label", "Unit"],
+                        column_config={
+                            "Parameter": None,
+                            "Label": st.column_config.TextColumn("Parameter"),
+                            "Lower": st.column_config.NumberColumn("Lower bound", format="%.4g", required=True),
+                            "Upper": st.column_config.NumberColumn("Upper bound", format="%.4g", required=True),
+                            "Distribution": st.column_config.SelectboxColumn(options=["uniform", "log-uniform"], required=True),
+                        }, key=editor_key,
+                    )
             size, scramble = st.columns(2)
-            with size:
-                N = st.select_slider("Base sample size N", options=[512, 1024, 2048, 4096, 8192],
-                                     value=4096, key="sens_N", persist_state="session")
-            with scramble:
-                seed = st.number_input("Sampling seed", min_value=0, max_value=1000000,
-                                       value=12345, step=1, key="sens_seed", persist_state="session")
-            st.caption(f"{N * (len(keys) + 2):,} model evaluations · 500 bootstrap resamples · 95% intervals")
+            N, trajectories = 4096, 40
+            if method == "Sobol":
+                N = size.select_slider("Base sample size N", options=[512, 1024, 2048, 4096, 8192],
+                                       value=4096, key="sens_N", persist_state="session")
+                cost = N * (len(keys) + 2)
+                note = "500 bootstrap resamples per material · 95% intervals"
+            else:
+                trajectories = size.select_slider("Morris trajectories", options=[20, 40, 80, 160],
+                                                  value=40, key="sens_trajectories", persist_state="session")
+                cost = trajectories * (len(keys) + 1)
+                note = "Six grid levels · normalized step 0.6"
+            seed = scramble.number_input("Sampling seed", min_value=0, max_value=1000000,
+                                          value=12345, step=1, key="sens_seed", persist_state="session")
+            st.caption(f"{cost * len(names):,} model evaluations across {len(names)} material(s) · {note}")
             submitted = st.form_submit_button("Run sensitivity analysis", type="primary")
 
-    config = dict(study=study, baseline_source=baseline_source, baseline=p, ranges=ranges.to_dict("records"),
-                  diffusion=diffusion, target=target, N=int(N), seed=int(seed), bootstrap_resamples=500)
-    signature = json.dumps(config, sort_keys=True)
-    st.session_state["sensitivity_current_signature"] = signature
+    configs = [dict(study=study, material=name, condition=presets[name]["condition"] if name != custom else "Manual inputs",
+                    baseline_source="Material preset" if name != custom else "Manual inputs",
+                    baseline=baselines[name], range_basis=range_mode, ranges=ranges[name].to_dict("records"),
+                    diffusion=diffusion, target=target, method=method, N=int(N), trajectories=int(trajectories),
+                    seed=int(seed), bootstrap_resamples=500 if method == "Sobol" else 0) for name in names]
+    signature = json.dumps(configs, sort_keys=True)
     if submitted:
-        saved_ranges[editor_key] = ranges.copy()
-        try:
-            with st.spinner("Calculating Sobol indices and confidence intervals…"):
-                result = calculate(config)
-            st.session_state["sensitivity_result"] = dict(signature=signature, config=config, result=result)
-            st.session_state.pop("sensitivity_excel", None)
-        except (ValueError, TypeError, OverflowError) as exc:
-            st.error(str(exc))
-    saved = st.session_state.get("sensitivity_result")
+        for name in names:
+            saved_ranges[editors[name]] = ranges[name].copy()
+        runs = []
+        with st.spinner(f"Calculating {method} sensitivity for {len(names)} material(s)…"):
+            for config in configs:
+                try:
+                    runs.append(dict(config=config, result=calculate(config)))
+                except (ValueError, TypeError, OverflowError) as exc:
+                    runs.append(dict(config=config, error=str(exc)))
+        st.session_state["sensitivity_batch"] = dict(signature=signature, runs=runs)
+        st.session_state.pop("sensitivity_excel", None)
+    saved = st.session_state.get("sensitivity_batch")
     if not saved:
         st.info("Set your ranges and run the analysis to compare parameter influence.")
         return
     if saved["signature"] != signature:
         st.info("Your settings have changed. Run the analysis to update the results.")
         return
-    render_results(saved["result"], config, signature)
-    material_count = sum(row["Parameter"] in MATERIAL for row in config["ranges"])
-    if (material_count >= 3 and config["target"] in ("sigma_abs", "sigma_index")
-            and not any(row["Parameter"] in EXPOSURE for row in config["ranges"])):
-        st.info("Use the three leading material parameters to screen a library in Inverse Exploration.")
-        st.button("Open material recommender →", on_click=open_recommender, key="sens_open_recommender")
+    for run in saved["runs"]:
+        if "error" in run:
+            st.warning(f"{run['config']['material']}: {run['error']}")
+    successes = [run for run in saved["runs"] if "result" in run]
+    if not successes:
+        return
+    if len(successes) > 1:
+        render_comparison(successes, configs)
+        available = [run["config"]["material"] for run in successes]
+        if st.session_state.get("sens_inspect_material") not in available:
+            st.session_state.pop("sens_inspect_material", None)
+        inspected = st.selectbox("Inspect material results", available, key="sens_inspect_material")
+        index = available.index(inspected)
+    else:
+        index = 0
+    active = successes[index]
+    config = active["config"]
+    active_signature = signature + config["material"]
+    st.session_state["sensitivity_current_signature"] = active_signature
+    st.session_state["sensitivity_result"] = dict(signature=active_signature, **active)
+    st.caption(f"Results for {config['material']} · {method} · {OUTPUTS[target][0]}")
+    render_results(active["result"], config, active_signature)
 
 
-def open_recommender():
-    st.session_state["main_navigation"] = "Inverse Exploration"
-    st.session_state["scroll_to_top"] = True
+def render_comparison(runs, configs):
+    st.subheader("Material Comparison")
+    morris = runs[0]["config"]["method"] == "Morris"
+    score = "mu_star" if morris else "ST"
+    table = pd.concat([run["result"]["indices"].assign(Material=run["config"]["material"],
+                                                     Condition=run["config"]["condition"]) for run in runs], ignore_index=True)
+    fig = go.Figure()
+    colors = ["#368575", "#c87d55", "#7f8165", "#92b8ad"]
+    for run, color in zip(runs, colors):
+        data = run["result"]["indices"]
+        fig.add_trace(go.Bar(x=data["Label"], y=data[score], name=run["config"]["material"], marker_color=color))
+    fig.update_layout(barmode="group", height=400, margin=dict(t=20, b=20),
+                      yaxis_title=(f"Morris μ* ({OUTPUTS[runs[0]['config']['target']][1]})" if morris else "Total effect · ST"),
+                      legend=dict(orientation="h", y=-.35))
+    st.plotly_chart(fig, width="stretch", key="sens_comparison_chart")
+    st.caption("Each material is analysed separately with the same sampling seed and response. "
+               "Its own nominal inputs and displayed bounds determine the ranking. "
+               + ("Morris effects use response units; compare only the same response." if morris else
+                  "ST describes a share of each material's own response variance, not its absolute stress level."))
+    with st.expander("Comparison table and downloads"):
+        st.dataframe(table.drop(columns="Parameter"), hide_index=True, width="stretch")
+        st.download_button("All material rankings (CSV)", table.to_csv(index=False).encode(),
+                           "material_sensitivity_comparison.csv", "text/csv", key="sens_comparison_csv")
+        st.download_button("All material settings (JSON)", json.dumps(configs, indent=2).encode(),
+                           "material_sensitivity_settings.json", "application/json", key="sens_comparison_settings")
 
 
 def render_results(result, config, signature):
+    with st.expander("Inputs and ranges used"):
+        st.dataframe(pd.DataFrame([dict(Parameter=label, Nominal=config["baseline"][key], Unit=unit,
+                                       Treatment="Varied" if key in {r["Parameter"] for r in config["ranges"]} else
+                                       "Calculated from temperature" if key == "D" and config["diffusion"]["mode"] == "Arrhenius" else "Fixed")
+                                   for key, (label, unit) in FIXED_META.items()]), hide_index=True, width="stretch")
+        st.dataframe(pd.DataFrame(config["ranges"]).drop(columns="Parameter"), hide_index=True, width="stretch")
+    if config["method"] == "Morris":
+        render_morris_results(result, config, signature)
+        return
     table = result["indices"].sort_values("ST", ascending=False)
     unit = OUTPUTS[config["target"]][1]
     st.subheader("Parameter Importance")
@@ -219,11 +318,55 @@ def render_results(result, config, signature):
         st.markdown("Scrambled Sobol sequence, Saltelli cross-sampling, centered first-order and Jansen "
                     "total-order estimators. [Method reference](https://salib.readthedocs.io/en/latest/_modules/SALib/analyze/sobol.html).")
 
+    render_downloads(result, config, signature)
+
+
+def render_morris_results(result, config, signature):
+    table = result["indices"].sort_values("mu_star", ascending=False)
+    unit = OUTPUTS[config["target"]][1]
+    st.subheader("Parameter Importance · Morris")
+    influence, variation = st.columns(2, border=True)
+    influence.markdown(r"**μ\* · Overall influence**")
+    influence.write("Mean absolute elementary effect across trajectories. Larger values indicate more influence over these ranges.")
+    variation.markdown("**σ · Variation in effect**")
+    variation.write("Variation among signed effects can indicate nonlinearity and/or interactions. It is not a confidence interval.")
+    fig = go.Figure()
+    for key, label, color in [("mu_star", "Overall influence · μ*", "#368575"),
+                               ("sigma", "Variation in effect · σ", "#c87d55")]:
+        fig.add_trace(go.Bar(y=table["Label"], x=table[key], orientation="h", name=label, marker_color=color))
+    fig.update_layout(barmode="group", height=max(340, 65 * len(table)),
+                      xaxis_title=f"Morris effect ({unit})", yaxis=dict(autorange="reversed"),
+                      margin=dict(t=25, b=30, l=15, r=25), legend=dict(orientation="h", y=1.12))
+    st.plotly_chart(fig, width="stretch", key="sens_morris_chart")
+    top = table.iloc[0]
+    if np.allclose(table["mu_star"], 0, rtol=0, atol=1e-15):
+        st.info("The selected response is constant across these trajectories; no influence ranking can be established.")
+    else:
+        st.info(f"Largest screening influence: **{top['Label']}** (μ* ≈ {top['mu_star']:.3g} {unit}) for these bounds.")
+    st.caption("Effects use normalized input steps and have the response's units. They are not percentages "
+               "or variance shares; compare effects only for the same response and stated ranges.")
+    with st.expander("Further information"):
+        st.dataframe(table.drop(columns="Parameter"), hide_index=True, width="stretch")
+        st.dataframe(result["summary"], hide_index=True, width="stretch")
+        st.caption("Summary statistics describe the sampled Morris trajectories, not independent probability draws or measured uncertainty.")
+        st.dataframe(result["samples"].head(500), hide_index=True, width="stretch")
+        st.write(f"{config['trajectories']} randomized one-at-a-time trajectories on a six-level grid "
+                 "with step 0.6 in normalized input space. Log-uniform inputs are stepped in log space. "
+                 "μ is the signed mean effect; μ* is the mean absolute effect; σ is the sample standard deviation.")
+        st.write("Uptake starts dry with both sheet faces exposed. The constrained stress index "
+                 "is an indicator; it does not predict interface traction or delamination failure.")
+    render_downloads(result, config, signature)
+
+
+def render_downloads(result, config, signature):
+    method = config["method"]
+    score = "mu_star" if method == "Morris" else "ST"
+    table = result["indices"].sort_values(score, ascending=False)
     with st.expander("Download the study", expanded=False):
         indices, samples, settings = st.columns(3)
-        indices.download_button("Sobol indices (CSV)", table.to_csv(index=False).encode(), "sobol_indices.csv", "text/csv", key="sens_indices_download")
-        samples.download_button("All samples (CSV)", result["samples"].to_csv(index=False).encode(), "sobol_samples.csv", "text/csv", key="sens_samples_download")
-        settings.download_button("Study settings (JSON)", json.dumps(config, indent=2).encode(), "sobol_settings.json", "application/json", key="sens_settings_download")
+        indices.download_button(f"{method} rankings (CSV)", table.to_csv(index=False).encode(), f"{method.lower()}_indices.csv", "text/csv", key="sens_indices_download")
+        samples.download_button("All samples (CSV)", result["samples"].to_csv(index=False).encode(), f"{method.lower()}_samples.csv", "text/csv", key="sens_samples_download")
+        settings.download_button("Study settings (JSON)", json.dumps(config, indent=2).encode(), f"{method.lower()}_settings.json", "application/json", key="sens_settings_download")
         if st.button("Prepare Excel workbook", key="sens_prepare_excel"):
             try:
                 with st.spinner("Preparing workbook with settings, samples, and results…"):

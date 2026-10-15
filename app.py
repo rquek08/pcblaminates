@@ -366,6 +366,15 @@ def render_style():
     [class*="st-key-sens_"] [data-testid="stBaseButton-secondary"]:hover {
         background: rgba(54,133,117,.16); border-color: #368575; }
     [class*="st-key-sens_"] button:focus-visible { outline: 2px solid #368575; }
+    .st-key-sens_scope {
+        background: rgba(54,133,117,.08); border-radius: .7rem; padding: .25rem; }
+    .st-key-sens_scope button {
+        border: 1px solid transparent; border-radius: .45rem; padding: .55rem 1rem;
+        color: #368575; background: transparent; transition: background-color .15s ease; }
+    .st-key-sens_scope button:hover { background: rgba(54,133,117,.14); }
+    .st-key-sens_scope button[aria-pressed="true"],
+    .st-key-sens_scope [data-testid="stBaseButton-segmentedControlActive"] {
+        color: #fff; background: #368575; border-color: #368575; }
     .eyebrow { color: #368575; font-size: .78rem; font-weight: 650; letter-spacing: .16em; }
     .hero-title { font-size: clamp(2.25rem, 4vw, 3.8rem); line-height: 1.15;
         text-align: left; font-weight: 700; letter-spacing: -.035em;
@@ -796,11 +805,7 @@ def main():
     if section == NAVIGATION[0]:
         render_simulation()
     elif section == NAVIGATION[1]:
-        snapshot = st.session_state.get("simulation_inputs", {})
-        scenario = dict(PRESETS[next(iter(PRESETS))], delta_T=60.0, t_hours=24.0, alpha_cu=16.5)
-        for key in scenario:
-            scenario[key] = snapshot.get(f"field_{key}", scenario[key])
-        render_sensitivity(scenario)
+        render_sensitivity(MATERIAL_LIBRARY["presets"])
     elif section == NAVIGATION[2]:
         render_inverse_exploration()
     else:

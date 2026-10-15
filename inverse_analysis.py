@@ -8,6 +8,8 @@ from sensitivity_analysis import EXPOSURE, MATERIAL, evaluate_samples, validate_
 
 def recommendation_parameters(saved):
     config = saved["config"]
+    if config.get("method", "Sobol") != "Sobol":
+        raise ValueError("Run a Sobol material-properties study to obtain total-effect screening weights.")
     if config["target"] not in ("sigma_abs", "sigma_index"):
         raise ValueError("Analyse stress-index magnitude or signed stress index before recommending materials.")
     if config["diffusion"]["mode"] != "Fixed D" or any(
