@@ -1,239 +1,137 @@
-"""Interactive property-space exploration and an in-plane expansion preview."""
+"""Sensitivity-driven recommendations and a conceptual laminate gallery."""
+import hashlib
 import json
 
-import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from inverse_analysis import condition_records, expansion_state, library_ranges, search_design_space
+from inverse_analysis import recommendation_parameters, recommend_materials, records_from_csv
+from laminate_showcase import render_showcase
+from sensitivity_analysis import MATERIAL, PARAMETERS
 
 
-def box_vertices(length, width, bottom, thickness):
-    return np.array([
-        [-length / 2, -width / 2, bottom], [length / 2, -width / 2, bottom],
-        [length / 2, width / 2, bottom], [-length / 2, width / 2, bottom],
-        [-length / 2, -width / 2, bottom + thickness],
-        [length / 2, -width / 2, bottom + thickness],
-        [length / 2, width / 2, bottom + thickness],
-        [-length / 2, width / 2, bottom + thickness],
-    ])
-
-
-def layer_mesh(vertices, name, color):
-    faces = np.array([[0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7],
-                      [0, 1, 5], [0, 5, 4], [1, 2, 6], [1, 6, 5],
-                      [2, 3, 7], [2, 7, 6], [3, 0, 4], [3, 4, 7]])
-    return go.Mesh3d(x=vertices[:, 0], y=vertices[:, 1], z=vertices[:, 2],
-                     i=faces[:, 0], j=faces[:, 1], k=faces[:, 2], name=name,
-                     color=color, flatshading=True, showlegend=True,
-                     lighting=dict(ambient=0.65, diffuse=0.7),
-                     hovertemplate=f"{name}<br>x: %{{x:.4f}} mm<br>y: %{{y:.4f}} mm<extra></extra>")
-
-
-def expansion_figure(state, length, width, thickness, copper_um, magnification):
-    """Animate separate layer dimensions; never infer curvature from mismatch strain."""
-    gap = max(thickness * 0.25, 0.15)
-    copper_bottom = thickness + gap
-    copper_thickness = copper_um / 1000
-
-    def meshes(progress):
-        laminate_scale = 1 + progress * magnification * state["laminate_strain"]
-        copper_scale = 1 + progress * magnification * state["copper_strain"]
-        if min(laminate_scale, copper_scale) <= 0:
-            raise ValueError("Choose a lower display magnification for this contraction.")
-        return [
-            layer_mesh(box_vertices(length * laminate_scale, width * laminate_scale, 0, thickness),
-                       "Laminate", "#648d76"),
-            layer_mesh(box_vertices(length * copper_scale, width * copper_scale,
-                                   copper_bottom, copper_thickness), "Copper foil", "#c87d55"),
-        ]
-
-    frames = [go.Frame(data=meshes(progress), traces=[0, 1], name=f"expansion_{i}")
-              for i, progress in enumerate(np.linspace(0, 1, 21))]
-    # Start at the current result; Replay shows the transition from original dimensions.
-    figure = go.Figure(data=meshes(1), frames=frames)
-    outline_x = [-length / 2, length / 2, length / 2, -length / 2, -length / 2]
-    outline_y = [-width / 2, -width / 2, width / 2, width / 2, -width / 2]
-    figure.add_trace(go.Scatter3d(x=outline_x, y=outline_y, z=[thickness] * 5,
-                                 mode="lines", line=dict(color="#a8b8b0", width=3, dash="dash"),
-                                 name="Original outline", hoverinfo="skip"))
-    max_scale = max(1, 1 + magnification * state["laminate_strain"],
-                    1 + magnification * state["copper_strain"])
-    figure.update_layout(
-        # Reserve room below the scene, including when legend items wrap.
-        height=375, margin=dict(l=0, r=0, b=75, t=55, autoexpand=False),
-        legend=dict(orientation="h", x=.5, xanchor="center", y=-.04, yanchor="top"),
-        scene=dict(domain=dict(x=[0, 1], y=[0, 1]), aspectmode="data",
-                   camera=dict(center=dict(x=0, y=0, z=0), eye=dict(x=1.5, y=-1.8, z=1.2)),
-                   xaxis=dict(title="Length (mm)", range=[-length * max_scale * .65, length * max_scale * .65]),
-                   yaxis=dict(title="Width (mm)", range=[-width * max_scale * .65, width * max_scale * .65]),
-                   zaxis=dict(title="Thickness (mm)", range=[-.1, copper_bottom + copper_thickness + .1])),
-        updatemenus=[dict(type="buttons", direction="left", x=.5, xanchor="center",
-                         y=1.15, yanchor="top", showactive=False,
-                         buttons=[dict(label="Replay expansion", method="animate",
-                                       args=[[f"expansion_{i}" for i in range(21)],
-                                             dict(mode="immediate", frame=dict(duration=65, redraw=True),
-                                                  transition=dict(duration=0))]),
-                                  dict(label="Original dimensions", method="animate",
-                                       args=[["expansion_0"], dict(mode="immediate",
-                                             frame=dict(duration=0, redraw=True), transition=dict(duration=0))])])],
-    )
-    return figure
-
-
-def property_space_figure(space, candidates):
-    figure = go.Figure()
-    for feasible, label, color, opacity in ((False, "Outside index limit", "#bcc7c1", .22),
-                                           (True, "Within index limit", "#368575", .8)):
-        points = space[space["feasible"] == feasible]
-        if points.empty:
-            continue
-        figure.add_trace(go.Scatter3d(
-            x=points["alpha_lam"], y=points["beta"], z=points["E"], mode="markers",
-            name=label, marker=dict(size=3, color=color, opacity=opacity),
-            customdata=points[["sigma_index", "nu", "D", "Csat"]].to_numpy(),
-            hovertemplate="CTE: %{x:.2f} ppm/K<br>CHE: %{y:.3e} m³/kg<br>E: %{z:.0f} MPa"
-                          "<br>Index: %{customdata[0]:+.3f} MPa<br>ν: %{customdata[1]:.3f}"
-                          "<br>D: %{customdata[2]:.3e} m²/s<br>Csat: %{customdata[3]:.2f} mol/m³<extra></extra>",
-        ))
-    figure.add_trace(go.Scatter3d(
-        x=candidates["alpha_lam"], y=candidates["beta"], z=candidates["E"],
-        mode="markers", name="Library comparisons",
-        marker=dict(size=7, symbol="diamond",
-                    color=np.where(candidates["feasible"], "#368575", "#c87d55"),
-                    line=dict(width=1, color=np.where(candidates["feasible"], "#205f4b", "#875637"))),
-        customdata=candidates[["grade", "sigma_index", "status"]].to_numpy(),
-        hovertemplate="%{customdata[0]}<br>Index: %{customdata[1]:+.3f} MPa<br>%{customdata[2]}<extra></extra>",
-    ))
-    figure.update_layout(height=440, margin=dict(l=0, r=0, b=0, t=10),
-                         legend=dict(orientation="h", y=-.08),
-                         scene=dict(xaxis_title="Laminate CTE (ppm/K)",
-                                    yaxis=dict(title="Moisture expansion (m³/kg)", tickformat=".1e"),
-                                    zaxis_title="Modulus (MPa)"))
-    return figure
+def open_sensitivity():
+    st.session_state["main_navigation"] = "Sensitivity Analysis"
+    st.session_state["scroll_to_top"] = True
 
 
 def render_inverse(records):
-    st.caption("Identify material-property combinations within a chosen stress-index limit, "
-               "then compare library materials with this model-based design space.")
-    controls, preview = st.columns([1, 1.05], gap="large", border=True)
-    with controls:
-        with st.container(border=False):
-            st.subheader("Design constraints")
-            limit = st.number_input("Maximum stress index magnitude (MPa)", min_value=0.0, value=10.0,
-                                    step=1.0, key="inverse_limit", persist_state="session")
-            environments = list(dict.fromkeys(record["condition"] for record in records))
-            condition = st.selectbox("Conditioning environment", environments, key="inverse_condition", persist_state="session")
-            matching = condition_records(records, condition)
-            exposure_temperature = float(condition.split("°C")[0])
-            reference_temperature = st.number_input("Reference temperature (°C)", min_value=-100.0,
-                                                    max_value=200.0, value=25.0, key="inverse_reference_temperature", persist_state="session")
-            time, thickness_input = st.columns(2)
-            hours = time.number_input("Exposure time (hours)", min_value=0.0, value=24.0,
-                                      key="inverse_hours", persist_state="session")
-            thickness = thickness_input.number_input("Laminate thickness (mm)", min_value=.001,
-                                                      value=1.6, key="inverse_thickness", persist_state="session")
-            st.caption(f"ΔT = {exposure_temperature - reference_temperature:+.1f} K. "
-                       "Diffusivity and saturation concentration use the selected library conditioning environment.")
-            with st.expander("Geometry and copper properties"):
-                length = st.number_input("Board length (mm)", min_value=1.0, value=20.0, key="inverse_length", persist_state="session")
-                width = st.number_input("Board width (mm)", min_value=1.0, value=12.0, key="inverse_width", persist_state="session")
-                copper_um = st.number_input("Copper foil thickness (µm)", min_value=1.0, value=35.0,
-                                            key="inverse_copper_thickness", persist_state="session")
-                copper_cte = st.number_input("Copper CTE (ppm/K)", value=16.5, key="inverse_copper_cte", persist_state="session")
-                st.caption("Length, width and copper thickness control the preview geometry. "
-                           "The current index model uses laminate thickness and copper CTE.")
-            preview_names = [r["name"] for r in matching]
-            if st.session_state.get("inverse_preview_material") not in preview_names:
-                st.session_state["inverse_preview_material"] = preview_names[0]
-            selected = st.selectbox("Preview material", preview_names, key="inverse_preview_material", persist_state="session")
-        st.caption("This material supplies the preview properties; it does not restrict the property-space search.")
-    exposure = dict(h_mm=thickness, t_hours=hours, delta_T=exposure_temperature - reference_temperature,
-                    alpha_cu=copper_cte)
-    record = next(r for r in matching if r["name"] == selected)
-    with preview:
-        with st.container(border=False):
-            st.subheader("Copper–laminate expansion preview")
-            with st.container(horizontal=True, vertical_alignment="center", gap="small"):
-                st.markdown("Display scale:", width="content")
-                display = st.radio("Display scale", ["True scale (1×)", "Magnified strain (100×)"],
-                                   horizontal=True, label_visibility="collapsed",
-                                   key="inverse_display_scale", persist_state="session")
-            magnification = 1 if display == "True scale (1×)" else 100
-            state = expansion_state(record["properties"], exposure, length, width)
-            try:
-                st.plotly_chart(expansion_figure(state, length, width, thickness, copper_um, magnification),
-                                width="stretch", key="inverse_expansion_preview")
-            except ValueError as exc:
-                st.error(str(exc))
-        with st.container(border=False, key="inverse_length_changes"):
-            lam, cu = st.columns(2)
-            lam.metric("Laminate length change", f"{state['delta_length_laminate'] * 1000:+.2f} µm")
-            cu.metric("Copper length change", f"{state['delta_length_copper'] * 1000:+.2f} µm")
-        st.caption(f"Preview stress index: {state['sigma_index']:+.2f} MPa. "
-                   "Displayed dimensions use the selected geometry; 100× magnifies strain only. "
-                   "Thickness stays fixed because through-thickness expansion coefficients are not provided. "
-                   "The layer gap is for visibility.")
+    st.caption("Use sensitivity results to shortlist materials, then explore the structures behind their properties.")
+    render_recommender(records)
+    st.divider()
+    render_showcase()
 
-    with st.expander("Material-property search bounds", expanded=False):
-        st.caption("Starting bounds span the library materials at the chosen environment. "
-                   "Edit them to explore other combinations; each property varies independently.")
-        saved_ranges = st.session_state.setdefault("inverse_property_ranges", {})
-        ranges = st.data_editor(saved_ranges.get(condition, library_ranges(records, condition)), hide_index=True, width="stretch",
-                                disabled=["Parameter", "Label", "Unit"], key=f"inverse_ranges_{condition}",
-                                column_config={"Parameter": None, "Label": "Property",
-                                               "Lower": st.column_config.NumberColumn(required=True, format="%.4g"),
-                                               "Upper": st.column_config.NumberColumn(required=True, format="%.4g"),
-                                               "Distribution": st.column_config.SelectboxColumn(
-                                                   options=["uniform", "log-uniform"], required=True)})
-    config = dict(condition=condition, exposure=exposure, limit=limit, ranges=ranges.to_dict("records"))
-    signature = json.dumps(config, sort_keys=True)
-    if st.button("Explore feasible space", type="primary", key="inverse_explore"):
-        saved_ranges[condition] = ranges.copy()
-        try:
-            with st.spinner("Exploring property combinations and comparing the material library…"):
-                result = search_design_space(records, **config)
-            st.session_state["inverse_result"] = dict(signature=signature, result=result)
-        except (ValueError, TypeError, OverflowError) as exc:
-            st.session_state.pop("inverse_result", None)
-            st.error(str(exc))
-    saved = st.session_state.get("inverse_result")
-    if not saved or saved["signature"] != signature:
-        st.caption("Choose your constraints, then explore the feasible space. Re-run after changing constraints or bounds.")
+
+def render_recommender(records):
+    st.subheader("Material recommender")
+    #st.caption("Sensitivity analysis → three important material parameters → shortlist up to 10 → verify the shortlist")
+    saved = st.session_state.get("sensitivity_result")
+    current = st.session_state.get("sensitivity_current_signature")
+    if not saved or current != saved["signature"]:
+        st.info("Sensitivity settings have changed. Run the study again to update recommendations." if saved else
+                "Run Sensitivity Analysis with at least three material parameters and a stress-index response to get started.")
+        st.button("Open Sensitivity Analysis →", on_click=open_sensitivity, key="inverse_open_sensitivity")
         return
-    result = saved["result"]
-    space, candidates = result["space"], result["candidates"]
-    st.subheader("Feasible property space")
-    samples_metric, library_metric = st.columns(2)
-    samples_metric.metric("Samples within index limit", f"{int(space['feasible'].sum()):,} / {len(space):,}")
-    library_metric.metric("Library entries within chosen limits", f"{int(candidates['feasible'].sum())} / {len(candidates)}")
-    if not space["feasible"].any():
-        st.info("No sampled combinations meet this limit within the chosen bounds. "
-                "Try adjusting the constraints or exploring different property bounds.")
-    st.plotly_chart(property_space_figure(space, candidates), width="stretch", key="inverse_property_space")
-    st.caption("A three-dimensional projection of a six-property search. Poisson's ratio, diffusivity "
-               "and saturation concentration also vary; hover over points to inspect them. "
-               "Feasible samples are combinations within the index limit, not guaranteed manufacturable materials. "
-               "Sampling does not establish the entire feasible boundary.")
-    st.subheader("Candidate library comparisons")
-    st.caption("Entries are compared with your index limit and property bounds, using your selected "
-               "thickness and exposure time. Green rows and green library diamonds meet both limits. "
-               "These are preliminary model comparisons, not material recommendations.")
-    table = candidates[["grade", "sigma_index", "margin", "status"]].rename(
-        columns={"grade": "Material", "sigma_index": "Signed index (MPa)",
-                 "margin": "Index-limit margin (MPa)", "status": "Comparison"})
-    highlighted_table = table.style.apply(
-        lambda row: ["background-color: #e4f2eb; color: #205f4b"] * len(row)
-        if candidates.loc[row.name, "feasible"] else [""] * len(row), axis=1)
-    st.dataframe(highlighted_table, hide_index=True, width="stretch",
-                 column_config={"Signed index (MPa)": st.column_config.NumberColumn(format="%.3f"),
-                                "Index-limit margin (MPa)": st.column_config.NumberColumn(format="%.3f")})
-    st.caption("Model validation and physical measurements of the interface are needed before qualifying "
-               "a material or assessing delamination risk. A small net index can also reflect cancellation "
-               "between hygroscopic and thermal contributions.")
-    with st.expander("Feasibility rule and sampled properties"):
-        st.latex(r"\left|\frac{E}{1-\nu}\left[\beta W_t+(\alpha_{\mathrm{lam}}-\alpha_{\mathrm{Cu}})10^{-6}\Delta T\right]\right|"
-                 r"\leq \sigma_{\mathrm{limit}}")
-        st.dataframe(space.head(500), hide_index=True, width="stretch")
-        st.download_button("Download sampled property space (CSV)", space.to_csv(index=False).encode(),
-                           "feasible_property_space.csv", "text/csv", key="inverse_space_download")
+    try:
+        top = recommendation_parameters(saved)
+    except ValueError as exc:
+        st.info(str(exc))
+        st.button("Open Sensitivity Analysis →", on_click=open_sensitivity, key="inverse_fix_sensitivity")
+        return
+    for column, (_, row) in zip(st.columns(3, gap="medium", border=True), top.iterrows()):
+        with column:
+            st.markdown(f"**{row['Label']}**")
+            st.metric("Total effect · ST", f"{row['ST']:.3f}")
+            st.caption(f"Screening weight: {row['Screening weight']:.1%}")
+            bounds = next(r for r in saved["config"]["ranges"] if r["Parameter"] == row["Parameter"])
+            st.caption(f"Study bounds: {bounds['Lower']:.4g}–{bounds['Upper']:.4g} {bounds['Unit']}")
+    baseline = saved["config"]["baseline"]
+    st.caption(f"Saved study: ΔT {baseline['delta_T']:+.1f} K · exposure {baseline['t_hours']:g} h · "
+               f"thickness {baseline['h_mm']:g} mm · copper CTE {baseline['alpha_cu']:g} ppm/K. "
+               "Normalised screening weights are not variance shares.")
+    with st.expander("Use a larger material dataset"):
+        upload = st.file_uploader("Material library (CSV)", type=["csv"], key="inverse_library_upload")
+        st.caption("Required columns: name, condition, alpha_lam, beta, E, nu, Csat, D. "
+                   "Units: CTE ppm/K; CHE m³/kg; modulus MPa; Poisson's ratio dimensionless; Csat mol/m³; D m²/s. "
+                   "Exposure and thickness come from the saved study.")
+        example = pd.DataFrame([dict(name=r["name"], condition=r["condition"],
+                                     **{key: r["properties"][key] for key in MATERIAL}) for r in records])
+        st.download_button("Download library CSV template", example.to_csv(index=False).encode(),
+                           "material_library.csv", "text/csv", key="inverse_library_template")
+    if upload is not None:
+        try:
+            records = records_from_csv(pd.read_csv(upload))
+        except (ValueError, UnicodeError, pd.errors.ParserError) as exc:
+            st.error(f"Could not read the material library: {exc}")
+            return
+    environment, constraint = st.columns(2)
+    condition = environment.selectbox("Library conditioning environment", list(dict.fromkeys(r["condition"] for r in records)),
+                                      key="inverse_recommend_condition", persist_state="session")
+    limit = constraint.number_input("Stress-index magnitude limit (MPa)", min_value=0., value=10.,
+                                    key="inverse_recommend_limit", persist_state="session")
+    st.caption("Conditioning selects the library's measured D and Csat. ΔT stays at the saved study value; "
+               "set the intended thermal exposure in Sensitivity Analysis.")
+    with st.expander("How screening works"):
+        st.write("The three largest material total effects (ST) set the screening weights. Materials outside those "
+                 "three study bounds are excluded. The rest are ranked by weighted distance to low-stress samples "
+                 "already calculated in the study. Log-uniform properties use logarithmic distance.")
+        st.write("Only the closest 10 undergo the full stress calculation using all six material properties, then "
+                 "are ordered by stress-index magnitude. The limit flags shortlisted materials; it does not trigger "
+                 "calculations for the remaining dataset.")
+        st.caption("Screening can miss better materials because three parameters do not capture every effect or "
+                   "interaction. A small net index may reflect cancellation between moisture and thermal contributions.")
+    signature = hashlib.sha256(json.dumps(dict(study=saved["signature"], records=records,
+                                              condition=condition, limit=limit), sort_keys=True).encode()).hexdigest()
+    if st.button("Recommend up to 10 materials", type="primary", key="inverse_recommend"):
+        try:
+            with st.spinner("Screening properties and verifying the shortlist…"):
+                result = recommend_materials(records, condition, saved, limit)
+            st.session_state["inverse_recommendation"] = dict(signature=signature, result=result)
+        except (ValueError, TypeError, KeyError, OverflowError) as exc:
+            st.session_state.pop("inverse_recommendation", None)
+            st.error(str(exc))
+    recommendation = st.session_state.get("inverse_recommendation")
+    if not recommendation or recommendation["signature"] != signature:
+        st.caption("Run the recommender to build a shortlist for these settings.")
+        return
+    result = recommendation["result"]
+    library, shortlist, savings = st.columns(3)
+    library.metric("Materials in environment", f"{result['total']:,}")
+    shortlist.metric("Full model evaluations", result["evaluated"])
+    savings.metric("Materials without full evaluation", f"{result['total'] - result['evaluated']:,}")
+    st.caption(f"{result['eligible']:,} eligible · {result['outside']:,} outside the three screening bounds · "
+               f"{result['invalid']:,} invalid property records excluded.")
+    candidates = result["candidates"]
+    if candidates.empty:
+        st.info("No materials have valid properties within the three screening bounds. "
+                "Check the dataset or broaden the sensitivity ranges and rerun that study.")
+        return
+    if result["total"] <= 10:
+        st.caption("This environment has at most 10 entries. A larger dataset will demonstrate savings "
+                   "beyond the property-bound exclusions.")
+    labels = {"rank": "Rank", "name": "Material", "sigma_abs": "Magnitude (MPa)",
+              "sigma_index": "Signed index (MPa)", "within_limit": "Within limit", "screening_distance": "Screening distance"}
+    st.dataframe(candidates[list(labels)].rename(columns=labels), hide_index=True, width="stretch", column_config={
+        "Magnitude (MPa)": st.column_config.NumberColumn(format="%.3f"),
+        "Signed index (MPa)": st.column_config.NumberColumn(format="%.3f"),
+        "Screening distance": st.column_config.NumberColumn(format="%.4f"),
+    })
+    if not candidates["within_limit"].any():
+        st.info("None of the shortlisted materials meets the selected index limit.")
+    st.caption("Rank uses full-model magnitude within the shortlist. Smaller screening distances mean closer "
+               "to the saved low-stress sample regions.")
+    with st.expander("Inspect a recommended material"):
+        selected = st.selectbox("Shortlisted material", candidates.index.tolist(),
+                                format_func=lambda index: candidates.loc[index, "name"], key="inverse_selected_candidate")
+        row = candidates.loc[selected]
+        figure = go.Figure(go.Bar(x=["Moisture", "Thermal", "Net index"],
+                                  y=[row["sigma_hygro"], row["sigma_thermal"], row["sigma_index"]],
+                                  marker_color=["#368575", "#c87d55", "#7f8165"]))
+        figure.update_layout(height=260, margin=dict(l=10, r=10, t=10, b=10), yaxis_title="MPa")
+        st.plotly_chart(figure, width="stretch", key="inverse_shortlist_contributions")
+        st.dataframe(pd.DataFrame([dict(Property=PARAMETERS[key][0], Value=row[key], Unit=PARAMETERS[key][1],
+                                       Screening="Top three" if key in top["Parameter"].tolist() else "Verification only")
+                                  for key in MATERIAL]), hide_index=True, width="stretch")
+    st.download_button("Download verified shortlist (CSV)", candidates.to_csv(index=False).encode(),
+                       "recommended_materials.csv", "text/csv", key="inverse_shortlist_download")

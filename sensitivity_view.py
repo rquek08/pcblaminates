@@ -19,6 +19,7 @@ def calculate(config):
 
 
 def render_sensitivity(simulation_scenario):
+    st.session_state["sensitivity_current_signature"] = None
     with st.container(horizontal=True, wrap=False, vertical_alignment="center",
                       gap="small", key="sensitivity_analysis_header"):
         st.markdown(
@@ -133,6 +134,7 @@ def render_sensitivity(simulation_scenario):
     config = dict(study=study, baseline_source=baseline_source, baseline=p, ranges=ranges.to_dict("records"),
                   diffusion=diffusion, target=target, N=int(N), seed=int(seed), bootstrap_resamples=500)
     signature = json.dumps(config, sort_keys=True)
+    st.session_state["sensitivity_current_signature"] = signature
     if submitted:
         saved_ranges[editor_key] = ranges.copy()
         try:
@@ -150,6 +152,16 @@ def render_sensitivity(simulation_scenario):
         st.info("Your settings have changed. Run the analysis to update the results.")
         return
     render_results(saved["result"], config, signature)
+    material_count = sum(row["Parameter"] in MATERIAL for row in config["ranges"])
+    if (material_count >= 3 and config["target"] in ("sigma_abs", "sigma_index")
+            and not any(row["Parameter"] in EXPOSURE for row in config["ranges"])):
+        st.info("Use the three leading material parameters to screen a library in Inverse Exploration.")
+        st.button("Open material recommender →", on_click=open_recommender, key="sens_open_recommender")
+
+
+def open_recommender():
+    st.session_state["main_navigation"] = "Inverse Exploration"
+    st.session_state["scroll_to_top"] = True
 
 
 def render_results(result, config, signature):

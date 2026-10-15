@@ -12,6 +12,7 @@ from pathlib import Path
 for module_name, filename in (("sensitivity_analysis", "sensitivity_analysis.py"),
                               ("_pcb_sensitivity_view", "sensitivity_view.py"),
                               ("inverse_analysis", "inverse_analysis.py"),
+                              ("laminate_showcase", "laminate_showcase.py"),
                               ("_pcb_inverse_view", "inverse_view.py")):
     sensitivity_spec = spec_from_file_location(module_name, Path(__file__).parent / filename)
     sensitivity_module = module_from_spec(sensitivity_spec)
@@ -537,9 +538,9 @@ def render_home():
         with st.container(border=False, height="stretch", key="home_inverse_card"):
             render_exploration_icon(INVERSE_EXPLORATION_ICON)
             st.caption("03 · INVERSE EXPLORATION")
-            st.markdown("#### Explore a feasible design space")
-            st.write("Define exposure and geometry constraints. Explore material-property combinations "
-                     "and compare library entries against a chosen stress-index limit.")
+            st.markdown("#### Find materials and explore structures")
+            st.write("Use your three leading sensitivity parameters to shortlist up to 10 materials. "
+                     "Explore laminate constituents and layouts with research on their effect on properties and stress.")
         st.button("View section →", on_click=navigate, args=(NAVIGATION[2],), key="home_inverse")
     st.caption("The explorer calculates an analytical mismatch stress index. "
                "Delamination assessment requires specific geometry and interface adhesion data.")
