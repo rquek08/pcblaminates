@@ -4,9 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PCB stack and copper–laminate interface</title>
+  <link rel="stylesheet" href="../static/typography.css">
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body { margin: 0; font-family: var(--pcb-body-font); }
     .viewer { overflow: hidden; padding: 22px 20px 18px; border-radius: 15px;
       color: #e6f2ec; background: radial-gradient(ellipse at 42% 38%, #1b4247, #10272e 80%); }
     .eyebrow { margin: 0 0 6px; color: #9bc9bb; font-size: 10px; font-weight: 650; letter-spacing: .16em; }
@@ -56,9 +57,6 @@
         <title id="stack-title">Exploded four-layer PCB stack</title>
         <desc id="stack-desc">Silkscreen, solder mask, four copper layers, prepreg and a laminate core. The selected core interface is highlighted.</desc>
         <defs>
-          <pattern id="weave" width="16" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(-16)">
-            <path d="M0 3H16M0 9H16M4 0V12M12 0V12" fill="none" stroke="#b4ce9c" stroke-width="1.2" opacity=".45" />
-          </pattern>
           <filter id="glow" x="-30%" y="-40%" width="160%" height="180%">
             <feGaussianBlur stdDeviation="3" />
           </filter>
@@ -69,25 +67,17 @@
       </svg>
       <svg class="detail" viewBox="0 0 680 560" role="img" aria-labelledby="detail-title detail-desc" aria-hidden="true">
         <title id="detail-title">Selected copper–laminate interface close-up</title>
-        <desc id="detail-desc">Cross-section of copper bonded to the selected laminate core. The gold line marks their interface.</desc>
-        <defs>
-          <pattern id="core-weave" width="95" height="44" patternUnits="userSpaceOnUse">
-            <path d="M-5 22Q19 3 43 22T91 22T139 22" fill="none" stroke="#4b7e63" stroke-width="7" />
-            <ellipse cx="19" cy="31" rx="10" ry="3" fill="#4b7e63" />
-            <ellipse cx="67" cy="12" rx="10" ry="3" fill="#4b7e63" />
-          </pattern>
-        </defs>
+        <desc id="detail-desc">Cross-section of copper bonded to a homogeneous laminate core. The gold line marks their interface.</desc>
         <text x="55" y="110" class="detail-note">CROSS-SECTION · SELECTED CORE INTERFACE</text>
         <g id="core-section">
-          <rect id="core-resin" x="55" width="440" height="145" fill="#bed1a6" />
-          <rect id="core-glass" x="55" width="440" height="145" fill="url(#core-weave)" />
+          <rect id="core-laminate" x="55" width="440" height="145" fill="#bed1a6" />
           <rect id="foil-section" x="55" width="440" height="30" fill="#d99361" />
           <line id="bond-line" x1="55" x2="495" stroke="#ffe1a0" stroke-width="4" />
           <path id="foil-leader" class="leader" />
           <path id="core-leader" class="leader" />
           <text id="foil-label" x="538" class="detail-label"></text>
           <text id="core-label" x="538" class="detail-label">Laminate</text>
-          <text id="core-sublabel" x="538" class="detail-note">Glass + resin</text>
+          <text id="core-sublabel" x="538" class="detail-note">Homogeneous</text>
         </g>
         <path id="interface-callout" d="" fill="none" stroke="#e3bd70" stroke-width="1.5" />
         <text x="70" y="400" fill="#ffe1a0" font-size="14" font-weight="600">Copper–laminate bond</text>
@@ -112,11 +102,11 @@
       {label: 'Top silkscreen', fill: '#91bdb1', type: 'silk'},
       {label: 'Top solder mask', fill: '#388c7b', type: 'mask'},
       {label: 'L1 · Signal copper', fill: '#bf8955', type: 'copper'},
-      {label: 'Prepreg', fill: '#a3b68b', type: 'glass'},
+      {label: 'Prepreg', fill: '#a3b68b', type: 'dielectric'},
       {label: 'L2 · Plane copper', fill: '#cba15f', type: 'plane'},
-      {label: 'Laminate core', fill: '#8da87a', type: 'glass'},
+      {label: 'Laminate core', fill: '#8da87a', type: 'dielectric'},
       {label: 'L3 · Plane copper', fill: '#cba15f', type: 'plane'},
-      {label: 'Prepreg', fill: '#a3b68b', type: 'glass'},
+      {label: 'Prepreg', fill: '#a3b68b', type: 'dielectric'},
       {label: 'L4 · Signal copper', fill: '#bf8955', type: 'copper'},
       {label: 'Bottom solder mask', fill: '#388c7b', type: 'mask'},
       {label: 'Bottom silkscreen', fill: '#91bdb1', type: 'silk'}
@@ -152,7 +142,6 @@
                                   opacity: .55, filter: 'url(#glow)'}, g);
       node('polygon', {points: board, fill: layer.fill, stroke: chosen ? '#ffe1a0' : '#81a898',
                        'stroke-width': chosen ? 1.8 : .8, class: 'face'}, g);
-      if (layer.type === 'glass') node('polygon', {points: board, fill: 'url(#weave)'}, g);
       if (layer.type === 'mask' || layer.type === 'copper') {
         for (let k = 0; k < 6; k++) {
           const v = .12 + k * .14;
@@ -185,7 +174,7 @@
     const coreY = upper ? 205 : 175;
     const bondY = upper ? 205 : 320;
     document.querySelector('#foil-section').setAttribute('y', copperY);
-    for (const id of ['core-resin','core-glass']) document.querySelector('#'+id).setAttribute('y', coreY);
+    document.querySelector('#core-laminate').setAttribute('y', coreY);
     for (const key of ['y1','y2']) document.querySelector('#bond-line').setAttribute(key,bondY);
     document.querySelector('#foil-leader').setAttribute('d',`M495 ${copperY+15} H525`);
     document.querySelector('#core-leader').setAttribute('d',`M495 ${coreY+70} H525`);

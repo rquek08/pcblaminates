@@ -9,7 +9,8 @@ from pathlib import Path
 
 # Load the exploration modules from this app's folder, including when older
 # copies from the parent folder are already in Python's module cache.
-for module_name, filename in (("sensitivity_analysis", "sensitivity_analysis.py"),
+for module_name, filename in (("typography", "typography.py"),
+                              ("sensitivity_analysis", "sensitivity_analysis.py"),
                               ("_pcb_sensitivity_view", "sensitivity_view.py"),
                               ("inverse_analysis", "inverse_analysis.py"),
                               ("laminate_showcase", "laminate_showcase.py"),
@@ -22,6 +23,7 @@ for module_name, filename in (("sensitivity_analysis", "sensitivity_analysis.py"
 render_sensitivity = sys.modules["_pcb_sensitivity_view"].render_sensitivity
 render_inverse = sys.modules["_pcb_inverse_view"].render_inverse
 render_stack = sys.modules["_pcb_stack_view"].render_stack
+typography = sys.modules["typography"]
 
 # -----------------------------------------------------------------------------
 # Configuration & Constants
@@ -277,8 +279,29 @@ def scroll_to_top_after_navigation():
 
 
 def render_style():
+    typography.configure_charts()
+    st.markdown("<style>" + typography.font_css() + "</style>", unsafe_allow_html=True)
     st.markdown("""
     <style>
+    .stApp, .stApp input, .stApp textarea, .stApp button, .stApp select {
+        font-family: var(--pcb-body-font); }
+    .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6,
+    .st-key-home_link button p {
+        font-family: var(--pcb-heading-font) !important; font-weight: 400 !important; }
+    [data-testid="stNumberInput"] input,
+    [data-testid="stMetricValue"], [data-testid="stMetricValue"] *,
+    [data-testid="stMetricDelta"], [data-testid="stSliderTickBar"],
+    .stApp code, .stApp pre {
+        font-family: var(--pcb-number-font) !important;
+        font-variant-numeric: tabular-nums; }
+    [data-baseweb="select"], [data-baseweb="select"] *,
+    [role="listbox"], [role="listbox"] * {
+        font-family: var(--pcb-number-font) !important; }
+    /* Preserve KaTeX's sized operators and delimiters, while using the
+       serif typeface for equation letters, digits and basic operators. */
+    .katex, .katex .mathnormal, .katex .mathit, .katex .mathrm, .katex .mathtt,
+    .katex .mord:not(.op-symbol), .katex .mrel, .katex .mbin, .katex .mpunct {
+        font-family: "DM Serif Display", KaTeX_Main, serif !important; }
     .block-container { max-width: 1440px; padding-top: 2rem; padding-bottom: 3rem; }
     .st-key-home_link button { border: none; background: transparent; padding-left: 0; }
     .st-key-home_link button p { font-size: 1.15rem; font-weight: 700; }
@@ -513,7 +536,8 @@ def render_home():
         st.button("Open the stress analyser →", type="primary", on_click=navigate,
                   args=(NAVIGATION[0],), key="open_simulation")
     with illustration:
-        st.iframe(Path(__file__).parent / "assets" / "laminate_animation.html", height="content")
+        animation = (Path(__file__).parent / "assets" / "laminate_animation.html").read_text(encoding="utf-8")
+        st.iframe(typography.document_fonts(animation), height="content")
 
     st.write("")
     render_home_stress_flow()
@@ -607,8 +631,7 @@ def render_simulation_inputs():
 
     with structure.container(border=True, key="simulation_structure"):
         st.markdown('<h2 class="scenario-title">Choose your laminate</h2>', unsafe_allow_html=True)
-        st.caption("Start with a preset or enter your own properties. "
-                   "Moisture properties correspond to the conditioning environment.")
+        st.caption("Start with a preset or enter your own properties. ")
         st.selectbox("Material Preset", list(PRESETS), key="preset_selector",
                      on_change=load_preset_values, label_visibility="collapsed",
                      help="Load the selected laminate's properties and conditioning scenario. All inputs remain editable.")

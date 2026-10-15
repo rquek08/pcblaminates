@@ -4,9 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PCB stack-up: moisture and heat</title>
+  <link rel="stylesheet" href="../static/typography.css">
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; color: #243e38; }
+    body { margin: 0; font-family: var(--pcb-body-font); color: #243e38; }
     .viewer {
       --stress-color: #7f8165;
       min-height: 544px; padding: 22px 24px 18px;
@@ -73,9 +74,6 @@
       <title id="stack-title">Bonded PCB layers and restrained expansion</title>
       <desc id="stack-description">Bonded stack: copper and laminate share the same in-plane deformation at each interface.</desc>
       <defs>
-        <pattern id="fibreglass" width="12" height="12" patternUnits="userSpaceOnUse">
-          <path d="M0 0H12M0 0V12" fill="none" stroke="#9db78d" stroke-width=".8" opacity=".25" />
-        </pattern>
         <marker id="restraint-arrowhead" viewBox="0 0 8 8" refX="8" refY="4"
                 markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
           <path id="arrow-tip" d="M0 0L8 4L0 8Z" fill="#7f8165" />
@@ -92,7 +90,6 @@
       </g>
       <g id="laminate" class="layer laminate">
         <rect class="material" x="85" y="117" width="350" height="96" />
-        <rect x="85" y="117" width="350" height="96" fill="url(#fibreglass)" />
         <text x="260" y="165">FR-4 / laminate core</text>
       </g>
       <g id="copper-bottom" class="layer copper">

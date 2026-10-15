@@ -1,2 +1,6 @@
 [theme]
 primaryColor = "#368575"
+font = "DM Sans, sans-serif"
+headingFont = "DM Serif Display, serif"
+headingFontWeights = 400
+codeFont = "JetBrains Mono, monospace"

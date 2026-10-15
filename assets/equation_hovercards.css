@@ -24,7 +24,7 @@
   background: var(--background-color, #fff);
   color: var(--text-color, #243e38);
   box-shadow: 0 10px 32px rgba(28, 57, 45, .18), 0 2px 6px rgba(28, 57, 45, .08);
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: var(--pcb-body-font, "DM Sans", sans-serif);
   font-size: 14px;
   line-height: 1.5;
   animation: pcb-card-appear .12s ease-out;
@@ -49,6 +49,7 @@
 }
 .pcb-equation-card__units-label { color: #60756d; font-size: 12px; }
 .pcb-equation-card__units-value {
+  font-family: var(--pcb-number-font, "JetBrains Mono", monospace);
   padding: 2px 8px;
   border-radius: 5px;
   background: rgba(54, 133, 117, .09);

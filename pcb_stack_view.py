@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 import streamlit as st
+from typography import document_fonts
 
 
 def stack_html(material, thickness_mm, laminate_cte, copper_cte, interface):
@@ -12,7 +13,7 @@ def stack_html(material, thickness_mm, laminate_cte, copper_cte, interface):
     # frame. A material name must never become HTML or terminate the script.
     payload = json.dumps(config).replace("<", "\\u003c")
     template = (Path(__file__).parent / "assets" / "pcb_stack_selector.html").read_text(encoding="utf-8")
-    return template.replace("/* STACK_CONFIG */", "const config = " + payload + ";")
+    return document_fonts(template).replace("/* STACK_CONFIG */", "const config = " + payload + ";")
 
 
 def render_stack(material, thickness_mm, laminate_cte, copper_cte):

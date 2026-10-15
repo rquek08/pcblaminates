@@ -1,0 +1,36 @@
+/* Fonts bundled from google/fonts; each family's SIL license is in fonts/. */
+@font-face {
+  font-family: "DM Sans";
+  src: url("fonts/DM-Sans-Variable.ttf") format("truetype");
+  font-weight: 100 1000;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "DM Serif Display";
+  src: url("fonts/DM-Serif-Display-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("fonts/JetBrains-Mono-Variable.ttf") format("truetype");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+:root {
+  --pcb-body-font: "DM Sans", sans-serif;
+  --pcb-heading-font: "DM Serif Display", Georgia, serif;
+  --pcb-number-font: "JetBrains Mono", monospace;
+}
+body { font-family: var(--pcb-body-font); }
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--pcb-heading-font) !important;
+  font-weight: 400 !important;
+}
+code, pre, .numeric, .chip {
+  font-family: var(--pcb-number-font);
+  font-variant-numeric: tabular-nums;
+}
