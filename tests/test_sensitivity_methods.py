@@ -5,7 +5,6 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from inverse_analysis import recommendation_parameters
 from sensitivity_analysis import (
     MATERIAL, OUTPUTS, STUDIES, default_ranges, evaluate_samples, excel_report,
     material_ranges, reference_baseline, run_analysis,
@@ -59,8 +58,6 @@ class SensitivityMethodsTests(unittest.TestCase):
         two = run_analysis(self.p, ranges, self.diffusion, "eps_h", method="Morris", seed=42)
         pd.testing.assert_frame_equal(one["indices"], two["indices"])
         self.assertTrue((one["indices"]["sigma"] > 0).all())
-        with self.assertRaisesRegex(ValueError, "total-effect"):
-            recommendation_parameters(dict(config=dict(method="Morris"), result=one))
 
     def test_additional_responses_and_morris_export_have_correct_meaning(self):
         self.assertIn("eps_h", OUTPUTS)

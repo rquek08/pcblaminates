@@ -1,126 +1,131 @@
-"""Screen a library using saved sensitivity samples; verify only the shortlist."""
+"""Filter material libraries and rank every eligible record in bounded batches."""
 import numpy as np
 import pandas as pd
-from scipy.spatial import cKDTree
 
-from sensitivity_analysis import EXPOSURE, MATERIAL, evaluate_samples, validate_baseline
+from sensitivity_analysis import MATERIAL, evaluate_samples
 
 
-def recommendation_parameters(saved):
-    config = saved["config"]
-    if config.get("method", "Sobol") != "Sobol":
-        raise ValueError("Run a Sobol material-properties study to obtain total-effect screening weights.")
-    if config["target"] not in ("sigma_abs", "sigma_index"):
-        raise ValueError("Analyse stress-index magnitude or signed stress index before recommending materials.")
-    if config["diffusion"]["mode"] != "Fixed D" or any(
-            row["Parameter"] in EXPOSURE for row in config["ranges"]):
-        raise ValueError("Run a material-properties study with fixed exposure inputs to recommend materials.")
-    table = saved["result"]["indices"]
-    table = table[table["Parameter"].isin(MATERIAL)].copy()
-    if len(table) < 3:
-        raise ValueError("Vary at least three material parameters in Sensitivity Analysis.")
-    if not np.isfinite(table["ST"].to_numpy(dtype=float)).all():
-        raise ValueError("Sensitivity rankings must be finite. Run a new sensitivity study.")
-    table = table.sort_values("ST", ascending=False, kind="stable").head(3)
-    weights = np.maximum(table["ST"].to_numpy(dtype=float), 0)
-    if weights.sum() <= 0:
-        raise ValueError("The study has no positive total-effect estimates to guide screening.")
-    table["Screening weight"] = weights / weights.sum()
-    return table
+APPLICATION_DEFAULTS = dict(delta_T=60.0, t_hours=24.0, h_mm=1.6, alpha_cu=16.5)
+OBJECTIVES = {
+    "sigma_abs": ("Smallest stress-index magnitude", "MPa"),
+    "eps_h": ("Lowest hygroscopic swelling", "dimensionless"),
+    "W_t": ("Lowest absorbed water concentration", "kg/m³"),
+}
+RESULT_OUTPUTS = ["sigma_abs", "sigma_index", "sigma_hygro", "sigma_thermal", "Mt_Minf", "eps_h", "W_t"]
 
 
 def records_from_csv(frame):
+    """Read engineering-unit inputs; preserve invalid numeric rows for reporting."""
     required = ["name", "condition", *MATERIAL]
     missing = [key for key in required if key not in frame]
     if missing:
         raise ValueError("Missing CSV columns: " + ", ".join(missing))
-    records = []
-    for row in frame.to_dict("records"):
-        if pd.isna(row["name"]) or pd.isna(row["condition"]):
-            raise ValueError("Every CSV row needs a material name and conditioning environment.")
-        records.append(dict(name=str(row["name"]), condition=str(row["condition"]),
-                            supplier=str(row.get("supplier", "")), grade=str(row.get("grade", row["name"])),
-                            properties={key: row[key] for key in MATERIAL}))
-    if not records:
+    if frame.empty:
         raise ValueError("The uploaded material library is empty.")
-    return records
+    result = frame.copy()
+    for key in ("name", "condition"):
+        if result[key].isna().any() or result[key].astype(str).str.strip().eq("").any():
+            raise ValueError("Every library row needs a material name and conditioning environment.")
+        result[key] = result[key].astype(str).str.strip()
+    for key, fallback in (("material_class", "Unspecified"), ("supplier", ""), ("grade", "")):
+        if key not in result:
+            result[key] = fallback
+        result[key] = result[key].fillna(fallback).astype(str).str.strip()
+    result["material_class"] = result["material_class"].replace("", "Unspecified")
+    result[MATERIAL] = result[MATERIAL].apply(pd.to_numeric, errors="coerce")
+    return result[["name", "condition", "material_class", "supplier", "grade", *MATERIAL]].reset_index(drop=True)
 
 
-def _normalise(values, row):
-    lo, hi = float(row["Lower"]), float(row["Upper"])
-    if row["Distribution"] == "log-uniform":
-        return (np.log(values) - np.log(lo)) / (np.log(hi) - np.log(lo))
-    return (values - lo) / (hi - lo)
+def prepare_library(records):
+    """Accept bundled preset records or a flat uploaded library."""
+    if isinstance(records, pd.DataFrame):
+        return records_from_csv(records)
+    rows = [dict(name=r.get("name"), condition=r.get("condition"),
+                 material_class=r.get("material_class", "Unspecified"),
+                 supplier=r.get("supplier", ""), grade=r.get("grade", ""),
+                 **{key: r.get("properties", {}).get(key, np.nan) for key in MATERIAL}) for r in records]
+    return records_from_csv(pd.DataFrame(rows, columns=["name", "condition", "material_class", "supplier", "grade", *MATERIAL]))
 
 
-def recommend_materials(records, condition, saved, limit=10.0, shortlist_size=10):
-    """Rank by weighted proximity to low-|stress| samples, then verify up to ten.
+def validate_application(application):
+    for key in APPLICATION_DEFAULTS:
+        if key not in application or not np.isfinite(application[key]):
+            raise ValueError("Enter finite temperature change, soak time, thickness and copper CTE values.")
+    if application["h_mm"] <= 0:
+        raise ValueError("Laminate thickness must be greater than zero.")
+    if application["t_hours"] < 0:
+        raise ValueError("Soak time cannot be negative.")
 
-    Screening makes no model calls. Projection onto three properties loses
-    omitted effects and interactions, so this is not a global-optimum guarantee.
+
+def recommend_materials(library, condition, application, objective="sigma_abs", material_class=None,
+                        property_bounds=None, output_limits=None, shortlist_size=10, batch_size=4096):
+    """Return the exact best K qualifying records, evaluating each eligible row once.
+
+    Library loading is separate so callers can cache the prepared numeric table.
+    Model arrays are bounded by batch_size; only the best K outputs are retained.
+    No sensitivity rankings, surrogate predictions or three-property screen are used.
     """
-    if not np.isfinite(limit) or limit < 0:
-        raise ValueError("The stress-index limit must be finite and nonnegative.")
+    validate_application(application)
+    if objective not in OBJECTIVES:
+        raise ValueError("Choose a supported ranking objective.")
     if not isinstance(shortlist_size, int) or not 1 <= shortlist_size <= 10:
-        raise ValueError("The shortlist must contain between one and ten materials.")
-    top = recommendation_parameters(saved)
-    keys = top["Parameter"].tolist()
-    config = saved["config"]
-    ranges = {row["Parameter"]: row for row in config["ranges"]}
-    samples = saved["result"]["samples"]
-    # A/B are independent base blocks; cross-sampling blocks reuse their values.
-    base = samples[samples["Block"].isin(["A", "B"])].copy()
-    valid = np.isfinite(base[[*keys, "sigma_abs"]].to_numpy(dtype=float)).all(axis=1)
-    for key in keys:
-        valid &= base[key].between(ranges[key]["Lower"], ranges[key]["Upper"])
-    base = base[valid]
-    if base.empty:
-        raise ValueError("No valid independent sensitivity samples are available for screening.")
-    # A spread of the best decile allows more than one favourable combination.
-    good = base.nsmallest(max(1, int(np.ceil(len(base) * .1))), "sigma_abs")
-    if len(good) > 128:
-        good = good.iloc[np.linspace(0, len(good) - 1, 128).astype(int)]
-    scale = np.sqrt(top["Screening weight"].to_numpy())
-    targets = np.column_stack([_normalise(good[key].to_numpy(), ranges[key]) for key in keys]) * scale
-    tree = cKDTree(targets)
-    baseline = dict(config["baseline"])
-    validate_baseline(baseline)
-    matches = [record for record in records if record["condition"] == condition]
-    if not matches:
-        raise ValueError("No library materials are available for this conditioning environment.")
-    candidates = pd.DataFrame([
-        dict(name=r["name"], supplier=r.get("supplier", ""), grade=r.get("grade", r["name"]),
-             **{key: r.get("properties", {}).get(key, np.nan) for key in MATERIAL}) for r in matches])
-    candidates[MATERIAL] = candidates[MATERIAL].apply(pd.to_numeric, errors="coerce")
-    # Batch the physical-domain checks used by validate_baseline; avoid one
-    # NumPy validation call per property per record in a large library.
+        raise ValueError("Show between one and ten materials.")
+    if not isinstance(batch_size, int) or batch_size < 1:
+        raise ValueError("Batch size must be a positive integer.")
+    property_bounds = property_bounds or {}
+    output_limits = output_limits or {}
+    for key, (lo, hi) in property_bounds.items():
+        if key not in MATERIAL or not np.all(np.isfinite([lo, hi])) or hi < lo:
+            raise ValueError("Property bounds must be finite, ordered ranges for supported material properties.")
+    for key, limit in output_limits.items():
+        if key not in OBJECTIVES or not np.isfinite(limit) or limit < 0:
+            raise ValueError("Output requirements must be nonnegative, finite limits for stress, swelling or water concentration.")
+    frame = library if isinstance(library, pd.DataFrame) else prepare_library(library)
+    selected = frame["condition"].eq(condition)
+    if material_class is not None:
+        selected &= frame["material_class"].eq(material_class)
+    candidates = frame.loc[selected].copy()
+    candidates["_order"] = np.flatnonzero(selected.to_numpy())
     valid = np.isfinite(candidates[MATERIAL].to_numpy(dtype=float)).all(axis=1)
-    valid &= candidates["E"] > 0
-    valid &= (candidates[["D", "Csat", "beta"]] >= 0).all(axis=1)
-    valid &= (candidates["nu"] > -1) & (candidates["nu"] < .5)
+    valid &= (candidates["E"] > 0).to_numpy()
+    valid &= (candidates[["D", "Csat", "beta"]] >= 0).all(axis=1).to_numpy()
+    valid &= ((candidates["nu"] > -1) & (candidates["nu"] < .5)).to_numpy()
     inside = np.ones(len(candidates), dtype=bool)
-    for key in keys:
-        inside &= candidates[key].between(float(ranges[key]["Lower"]), float(ranges[key]["Upper"]))
-    invalid_count = int((~valid).sum())
-    outside_count = int((valid & ~inside).sum())
-    candidates = candidates[valid & inside].copy()
-    for key in baseline:
-        if key not in MATERIAL:
-            candidates[key] = baseline[key]
-    summary = dict(top_parameters=top, total=len(matches), eligible=len(candidates),
-                   invalid=invalid_count, outside=outside_count, evaluated=0,
-                   reference_samples=len(good), candidates=candidates)
-    if candidates.empty:
-        return summary
-    features = np.column_stack([_normalise(candidates[key].to_numpy(), ranges[key]) for key in keys]) * scale
-    candidates["screening_distance"] = tree.query(features)[0]
-    shortlist = candidates.sort_values("screening_distance", kind="stable").head(shortlist_size).copy()
-    shortlist["screening_rank"] = np.arange(1, len(shortlist) + 1)
-    output = evaluate_samples({key: shortlist[key].to_numpy() for key in baseline}, config["diffusion"])
-    for key in ("sigma_abs", "sigma_index", "sigma_hygro", "sigma_thermal"):
-        shortlist[key] = output[key]
-    shortlist["within_limit"] = shortlist["sigma_abs"] <= limit
-    shortlist = shortlist.sort_values(["sigma_abs", "screening_distance"], kind="stable").reset_index(drop=True)
-    shortlist.insert(0, "rank", np.arange(1, len(shortlist) + 1))
-    summary.update(candidates=shortlist, evaluated=len(shortlist))
+    for key, (lo, hi) in property_bounds.items():
+        inside &= candidates[key].between(lo, hi).to_numpy()
+    summary = dict(library_total=len(frame), total=len(candidates), invalid=int((~valid).sum()),
+                   property_excluded=int((valid & ~inside).sum()), eligible=int((valid & inside).sum()),
+                   evaluated=0, numerical_invalid=0, requirements_excluded=0, qualifying=0, batches=0)
+    candidates = candidates.loc[valid & inside]
+    best = pd.DataFrame()
+    for start in range(0, len(candidates), batch_size):
+        batch = candidates.iloc[start:start + batch_size].copy()
+        params = {key: batch[key].to_numpy() for key in MATERIAL}
+        params.update({key: float(application[key]) for key in APPLICATION_DEFAULTS})
+        with np.errstate(over="ignore", invalid="ignore", under="ignore"):
+            output = evaluate_samples(params, {"mode": "Fixed D"})
+        summary["evaluated"] += len(batch)
+        summary["batches"] += 1
+        for key in RESULT_OUTPUTS:
+            batch[key] = output[key]
+        finite = np.isfinite(batch[RESULT_OUTPUTS].to_numpy()).all(axis=1)
+        summary["numerical_invalid"] += int((~finite).sum())
+        meets = np.ones(len(batch), dtype=bool)
+        for key, limit in output_limits.items():
+            meets &= batch[key].le(limit).to_numpy()
+        summary["requirements_excluded"] += int((finite & ~meets).sum())
+        batch = batch.loc[finite & meets].copy()
+        summary["qualifying"] += len(batch)
+        if batch.empty:
+            continue
+        best = pd.concat([best, batch], ignore_index=True)
+        best = best.sort_values([objective, "_order"], kind="stable").head(shortlist_size)
+    if not best.empty:
+        best = best.drop(columns="_order").reset_index(drop=True)
+        best.insert(0, "rank", np.arange(1, len(best) + 1))
+        best["meets_requirements"] = True
+        best["ranking_objective"] = objective
+        for key in APPLICATION_DEFAULTS:
+            best[key] = application[key]
+    summary["candidates"] = best
     return summary

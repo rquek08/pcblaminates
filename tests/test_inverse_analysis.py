@@ -1,4 +1,5 @@
 import copy
+from io import StringIO
 import json
 import unittest
 from pathlib import Path
@@ -7,118 +8,178 @@ from unittest.mock import patch
 import numpy as np
 import pandas as pd
 
-from inverse_analysis import recommendation_parameters, recommend_materials, records_from_csv
-from sensitivity_analysis import MATERIAL, STUDIES, default_ranges, evaluate_samples, reference_baseline, run_analysis
+from inverse_analysis import (
+    APPLICATION_DEFAULTS, OBJECTIVES, prepare_library, recommend_materials, records_from_csv,
+)
+from sensitivity_analysis import MATERIAL, evaluate_samples
 
 
 class MaterialRecommenderTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.records = json.loads((Path(__file__).parents[1] / "material_presets.json").read_text())["presets"]
-        cls.config = dict(baseline=reference_baseline(STUDIES[1]), ranges=default_ranges(MATERIAL).to_dict("records"),
-                          diffusion={"mode": "Fixed D"}, target="sigma_abs", N=512, seed=12345)
-        cls.saved = dict(config=cls.config, result=run_analysis(cls.config["baseline"], cls.config["ranges"],
-                         cls.config["diffusion"], cls.config["target"], cls.config["N"], cls.config["seed"]))
+        cls.frame = prepare_library(cls.records)
         cls.condition = "85°C/85%RH"
+        cls.application = dict(APPLICATION_DEFAULTS, t_hours=48., h_mm=.8, delta_T=35.)
+        rng = np.random.default_rng(12)
+        n = 137
+        cls.large = pd.DataFrame(dict(name=[f"Material {i}" for i in range(n)], condition=[cls.condition] * n,
+                                      material_class=["PCB laminate"] * n, alpha_lam=rng.uniform(8,23,n),
+                                      E=rng.uniform(7500,28000,n), nu=rng.uniform(.175,.32,n),
+                                      D=10**rng.uniform(-14,-11,n), Csat=rng.uniform(90,370,n),
+                                      beta=rng.uniform(1e-4,4e-4,n)))
+        cls.large = records_from_csv(cls.large)
 
-    def test_parameters_are_top_three_material_total_effects(self):
-        table = recommendation_parameters(self.saved)
-        expected = self.saved["result"]["indices"].nlargest(3, "ST")["Parameter"].tolist()
-        self.assertEqual(table["Parameter"].tolist(), expected)
-        self.assertAlmostEqual(table["Screening weight"].sum(), 1.)
+    def brute_force(self, frame, objective, output_limits=None):
+        output = evaluate_samples(dict(self.application, **{key: frame[key].to_numpy() for key in MATERIAL}),
+                                  {"mode": "Fixed D"})
+        expected = frame.copy()
+        for key, value in output.items():
+            expected[key] = value
+        for key, limit in (output_limits or {}).items():
+            expected = expected.loc[expected[key] <= limit]
+        return expected.sort_values(objective, kind="stable").head(10)
 
-    def test_large_library_evaluates_only_ten_and_ranks_verified_magnitude(self):
-        source = next(r for r in self.records if r["condition"] == self.condition)
-        records = [dict(source, name=f"Material {i}") for i in range(200)]
-        # Put this library within all sampled bounds, including diffusivity.
-        records = [dict(r, properties=dict(r["properties"], D=1e-12)) for r in records]
+    def test_all_objectives_match_exhaustive_ranking_across_batches(self):
+        for objective in OBJECTIVES:
+            with self.subTest(objective=objective):
+                result = recommend_materials(self.large, self.condition, self.application,
+                                             objective=objective, batch_size=17)
+                expected = self.brute_force(self.large, objective)
+                self.assertEqual(result["candidates"]["name"].tolist(), expected["name"].tolist())
+                self.assertEqual(result["evaluated"], len(self.large))
+                self.assertEqual(result["qualifying"], len(self.large))
+                self.assertEqual(len(result["candidates"]), 10)
+
+    def test_model_calls_are_bounded_and_every_eligible_record_is_evaluated_once(self):
         with patch("inverse_analysis.evaluate_samples", wraps=evaluate_samples) as model:
-            result = recommend_materials(records, self.condition, self.saved)
-        model.assert_called_once()
-        self.assertEqual(len(model.call_args.args[0]["E"]), 10)
-        self.assertEqual(result["total"], 200)
-        self.assertEqual(result["evaluated"], 10)
-        table = result["candidates"]
-        self.assertTrue(table["sigma_abs"].is_monotonic_increasing)
-        np.testing.assert_allclose(table["sigma_abs"], np.abs(table["sigma_index"]))
+            result = recommend_materials(self.large, self.condition, self.application, batch_size=16)
+        sizes = [len(call.args[0]["E"]) for call in model.call_args_list]
+        self.assertEqual(sum(sizes), len(self.large))
+        self.assertLessEqual(max(sizes), 16)
+        self.assertEqual(result["batches"], len(sizes))
 
-    def test_verification_uses_all_material_properties_and_saved_exposure(self):
-        result = recommend_materials(self.records, self.condition, self.saved)
-        self.assertGreater(result["evaluated"], 0)
-        for _, candidate in result["candidates"].iterrows():
-            original = next(r for r in self.records if r["name"] == candidate["name"])
-            p = dict(self.config["baseline"], **{key: original["properties"][key] for key in MATERIAL})
-            expected = evaluate_samples(p, self.config["diffusion"])
-            self.assertAlmostEqual(candidate["sigma_index"], float(expected["sigma_index"]))
-            self.assertEqual(candidate["delta_T"], self.config["baseline"]["delta_T"])
-
-    def test_limit_changes_flags_without_refilling_or_rescreening_shortlist(self):
-        strict = recommend_materials(self.records, self.condition, self.saved, limit=0.)["candidates"]
-        relaxed = recommend_materials(self.records, self.condition, self.saved, limit=1000.)["candidates"]
-        self.assertEqual(strict["name"].tolist(), relaxed["name"].tolist())
-        self.assertFalse(strict["within_limit"].any())
-        self.assertTrue(relaxed["within_limit"].all())
-
-    def test_invalid_and_out_of_bounds_materials_are_excluded_without_model_calls(self):
-        source = next(r for r in self.records if r["condition"] == self.condition)
-        key = recommendation_parameters(self.saved).iloc[0]["Parameter"]
-        upper = next(r["Upper"] for r in self.config["ranges"] if r["Parameter"] == key)
-        invalid = dict(source, name="Invalid", properties=dict(source["properties"], nu=.5))
-        outside = dict(source, name="Outside", properties=dict(source["properties"], **{key: upper * 2}))
-        with patch("inverse_analysis.evaluate_samples") as model:
-            result = recommend_materials([invalid, outside], self.condition, self.saved)
-        model.assert_not_called()
+    def test_class_environment_and_property_filters_apply_before_model_calls(self):
+        bounds = {"E": [10000., 20000.], "alpha_lam": [9., 14.]}
+        source = self.records[0]
+        records = [dict(source, name="Eligible"),
+                   dict(source, name="Other condition", condition="different"),
+                   dict(source, name="Other class", material_class="Other"),
+                   dict(source, name="Outside", properties=dict(source["properties"], E=50000.)),
+                   dict(source, name="Invalid", properties=dict(source["properties"], nu=.5))]
+        records[0]["properties"] = dict(source["properties"], E=15000., alpha_lam=12.)
+        with patch("inverse_analysis.evaluate_samples", wraps=evaluate_samples) as model:
+            result = recommend_materials(records, self.condition, self.application, material_class=source["material_class"],
+                                         property_bounds=bounds)
+        self.assertEqual(result["total"], 3)
         self.assertEqual(result["invalid"], 1)
-        self.assertEqual(result["outside"], 1)
-        self.assertEqual(result["evaluated"], 0)
+        self.assertEqual(result["property_excluded"], 1)
+        self.assertEqual(result["eligible"], 1)
+        self.assertEqual(result["candidates"]["name"].tolist(), ["Eligible"])
+        model.assert_called_once()
 
-    def test_unusable_studies_and_invalid_constraints_are_rejected(self):
-        for change in ({"target": "Mt_Minf"}, {"diffusion": {"mode": "Arrhenius"}},
-                       {"ranges": default_ranges(["E", "beta"]).to_dict("records")}):
-            saved = copy.deepcopy(self.saved)
-            saved["config"].update(change)
-            if len(saved["config"]["ranges"]) == 2:
-                saved["result"]["indices"] = saved["result"]["indices"].iloc[:2]
+    def test_output_limits_filter_before_top_ten_and_refill_from_entire_library(self):
+        limits = {"W_t": .5, "sigma_abs": 15.}
+        result = recommend_materials(self.large, self.condition, self.application, objective="eps_h",
+                                     output_limits=limits, batch_size=19)
+        expected = self.brute_force(self.large, "eps_h", limits)
+        self.assertEqual(result["candidates"]["name"].tolist(), expected["name"].tolist())
+        self.assertTrue(result["candidates"]["meets_requirements"].all())
+        self.assertGreater(result["requirements_excluded"], 0)
+        self.assertEqual(result["qualifying"] + result["requirements_excluded"], len(self.large))
+
+    def test_application_inputs_override_preset_exposure_and_use_all_material_properties(self):
+        result = recommend_materials(self.frame, self.condition, self.application)
+        for _, row in result["candidates"].iterrows():
+            original = next(r for r in self.records if r["name"] == row["name"])
+            expected = evaluate_samples(dict(self.application, **{key: original["properties"][key] for key in MATERIAL}),
+                                        {"mode": "Fixed D"})
+            for key in ("sigma_abs", "sigma_index", "sigma_hygro", "sigma_thermal", "eps_h", "W_t"):
+                self.assertAlmostEqual(row[key], float(expected[key]))
+            for key, value in self.application.items():
+                self.assertEqual(row[key], value)
+
+    def test_zero_soak_and_diffusivity_give_no_water_or_swelling(self):
+        frame = self.large.iloc[:1].copy()
+        for change in ({"t_hours": 0.}, {}):
+            if not change:
+                frame["D"] = 0.
+            result = recommend_materials(frame, self.condition, dict(self.application, **change))
+            row = result["candidates"].iloc[0]
+            self.assertEqual(row["W_t"], 0.)
+            self.assertEqual(row["eps_h"], 0.)
+            self.assertEqual(row["sigma_index"], row["sigma_thermal"])
+
+    def test_signed_contributions_and_absolute_magnitude_are_retained(self):
+        result = recommend_materials(self.large, self.condition, self.application)
+        table = result["candidates"]
+        np.testing.assert_allclose(table["sigma_abs"], np.abs(table["sigma_index"]))
+        np.testing.assert_allclose(table["sigma_index"], table["sigma_hygro"] + table["sigma_thermal"])
+        self.assertTrue(table["sigma_abs"].is_monotonic_increasing)
+
+    def test_tied_rankings_are_stable_across_batch_sizes(self):
+        source = self.records[0]
+        records = [dict(source, name=f"Record {i}") for i in range(30)]
+        for size in (1, 7, 100):
+            result = recommend_materials(records, self.condition, self.application, batch_size=size)
+            self.assertEqual(result["candidates"]["name"].tolist(), [f"Record {i}" for i in range(10)])
+
+    def test_no_matches_invalid_rows_and_unmet_requirements_return_no_fallback(self):
+        with patch("inverse_analysis.evaluate_samples") as model:
+            none = recommend_materials(self.frame, "unknown condition", self.application)
+            invalid = self.frame.copy()
+            invalid["E"] = -1.
+            bad = recommend_materials(invalid, self.condition, self.application)
+        model.assert_not_called()
+        self.assertTrue(none["candidates"].empty)
+        self.assertTrue(bad["candidates"].empty)
+        self.assertEqual(bad["invalid"], bad["total"])
+        unmet = recommend_materials(self.frame, self.condition, self.application, output_limits={"W_t": 0.})
+        self.assertTrue(unmet["candidates"].empty)
+        self.assertEqual(unmet["requirements_excluded"], unmet["evaluated"])
+
+    def test_csv_metadata_and_numeric_invalid_rows(self):
+        raw = self.large.copy()
+        raw["D"] = raw["D"].astype(object)
+        raw.loc[0, "D"] = "not numeric"
+        parsed = records_from_csv(raw)
+        self.assertTrue(pd.isna(parsed.loc[0, "D"]))
+        self.assertEqual(recommend_materials(parsed, self.condition, self.application)["invalid"], 1)
+        legacy = records_from_csv(raw.drop(columns=["material_class", "supplier", "grade"]))
+        self.assertTrue(legacy["material_class"].eq("Unspecified").all())
+        roundtrip = records_from_csv(pd.read_csv(StringIO(self.frame.to_csv(index=False))))
+        a = recommend_materials(roundtrip, self.condition, self.application)
+        b = recommend_materials(self.frame, self.condition, self.application)
+        self.assertEqual(a["candidates"]["name"].tolist(), b["candidates"]["name"].tolist())
+        for frame, message in ((raw.drop(columns="D"), "Missing CSV"), (raw.iloc[:0], "empty"),
+                               (raw.assign(name=" "), "material name")):
+            with self.assertRaisesRegex(ValueError, message):
+                records_from_csv(frame)
+
+    def test_nonfinite_model_results_are_excluded_and_counted(self):
+        frame = self.large.iloc[:2].copy()
+        frame.loc[frame.index[0], "E"] = 1e308
+        frame.loc[frame.index[0], "alpha_lam"] = 1e308
+        result = recommend_materials(frame, self.condition, self.application)
+        self.assertEqual(result["numerical_invalid"], 1)
+        self.assertEqual(result["qualifying"], 1)
+
+    def test_invalid_application_constraints_and_batch_configuration_are_rejected(self):
+        for changed in ({"h_mm": 0.}, {"t_hours": -1.}, {"delta_T": float('inf')}, {"alpha_cu": float('nan')}):
             with self.assertRaises(ValueError):
-                recommend_materials(self.records, self.condition, saved)
-        saved = copy.deepcopy(self.saved)
-        saved["config"]["ranges"] += default_ranges(["delta_T"]).to_dict("records")
-        with self.assertRaisesRegex(ValueError, "fixed exposure"):
-            recommendation_parameters(saved)
-        for limit in (-1., np.inf, np.nan):
+                recommend_materials(self.frame, self.condition, dict(self.application, **changed))
+        for kwargs in ({"objective": "unknown"}, {"shortlist_size": 11}, {"batch_size": 0},
+                       {"property_bounds": {"E": [2., 1.]}}, {"output_limits": {"sigma_abs": -1.}},
+                       {"output_limits": {"eps_h": float('nan')}}):
             with self.assertRaises(ValueError):
-                recommend_materials(self.records, self.condition, self.saved, limit=limit)
-        with self.assertRaises(ValueError):
-            recommend_materials(self.records, self.condition, self.saved, shortlist_size=11)
+                recommend_materials(self.frame, self.condition, self.application, **kwargs)
 
-    def test_csv_roundtrip_and_missing_fields(self):
-        frame = pd.DataFrame([dict(name=r["name"], condition=r["condition"],
-                                   **{key: r["properties"][key] for key in MATERIAL}) for r in self.records])
-        result = recommend_materials(records_from_csv(frame), self.condition, self.saved)
-        original = recommend_materials(self.records, self.condition, self.saved)
-        self.assertEqual(result["candidates"]["name"].tolist(), original["candidates"]["name"].tolist())
-        with self.assertRaisesRegex(ValueError, "Missing CSV columns"):
-            records_from_csv(frame.drop(columns="D"))
-        with self.assertRaisesRegex(ValueError, "empty"):
-            records_from_csv(frame.iloc[:0])
-
-    def test_screening_uses_log_distance_and_low_magnitude_not_most_negative_index(self):
-        config = copy.deepcopy(self.config)
-        keys = ["D", "E", "alpha_lam"]
-        config["ranges"] = default_ranges(keys).to_dict("records")
-        config["ranges"][0].update(Lower=1e-14, Upper=1e-10)
-        config["target"] = "sigma_index"
-        baseline = config["baseline"]
-        samples = pd.DataFrame(dict(D=[1e-12] + [1e-13] * 9, E=[baseline["E"]] * 10,
-                                    alpha_lam=[baseline["alpha_lam"]] * 10,
-                                    sigma_abs=[.2] + [999.] * 9, sigma_index=[.2] + [-999.] * 9,
-                                    Block=["A"] * 5 + ["B"] * 5))
-        indices = pd.DataFrame(dict(Parameter=keys, ST=[1., .5, .3]))
-        saved = dict(config=config, result=dict(samples=samples, indices=indices))
-        records = [dict(name=name, condition=self.condition, properties=dict(baseline, D=d))
-                   for name, d in (("One decade below", 1e-13), ("Closer logarithmically", 3e-12))]
-        result = recommend_materials(records, self.condition, saved, shortlist_size=1)
-        self.assertEqual(result["candidates"].iloc[0]["name"], "Closer logarithmically")
+    def test_does_not_modify_library_or_application(self):
+        original = self.large.copy(deep=True)
+        application = copy.deepcopy(self.application)
+        recommend_materials(self.large, self.condition, self.application)
+        pd.testing.assert_frame_equal(original, self.large)
+        self.assertEqual(application, self.application)
 
 
 if __name__ == "__main__":
