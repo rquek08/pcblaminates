@@ -83,14 +83,57 @@ LEGACY_PRESET_NAMES = {
 # Physics Pipeline Functions
 # -----------------------------------------------------------------------------
 def compute_fickian_uptake(D, h, t, n_terms=50):
-    """Crank's 1D analytical series solution for plane-sheet diffusion."""
-    if t <= 0:
-        return 0.0
-    n = np.arange(n_terms)
-    exponent = -((2 * n + 1) ** 2) * (np.pi ** 2) * D * t / (h ** 2)
-    terms = (1.0 / (2 * n + 1) ** 2) * np.exp(exponent)
-    uptake = 1.0 - (8.0 / np.pi ** 2) * np.sum(terms)
-    return float(np.clip(uptake, 0.0, 1.0))
+    """Two-face plane-sheet uptake for a time in seconds or an array of times."""
+    times = np.asarray(t, dtype=float)
+    Fo = D * np.maximum(times, 0.0) / h**2
+    uptake = np.zeros_like(Fo)
+    # The short-time limit avoids a truncated-series offset near t=0 or D=0.
+    early = (Fo > 0) & (Fo < 0.005)
+    uptake[early] = 4 * np.sqrt(Fo[early] / np.pi)
+    later = Fo >= 0.005
+    odd = 2 * np.arange(n_terms) + 1
+    terms = np.exp(-np.pi**2 * Fo[later, None] * odd**2) / odd**2
+    uptake[later] = 1.0 - (8.0 / np.pi**2) * terms.sum(axis=1)
+    uptake = np.clip(uptake, 0.0, 1.0)
+    return float(uptake) if times.ndim == 0 else uptake
+
+
+def render_moisture_uptake(D, h, t_hours, current_uptake):
+    st.subheader("Moisture Uptake Over Time")
+    window_days = st.radio("Time window (days)", [30, 120, 365], horizontal=True,
+                           key="uptake_window_days")
+    soak_days = t_hours / 24.0
+    end_days = max(float(window_days), soak_days * 1.1)
+    # Sample early times more densely, and include the exact selected soak time.
+    days = np.unique(np.r_[0.0, np.geomspace(end_days * 1e-7, end_days, 500), soak_days])
+    uptake = compute_fickian_uptake(D, h, days * 86400.0)
+    figure = go.Figure(go.Scatter(
+        x=days, y=uptake, mode="lines", name="Predicted uptake",
+        line=dict(color="#368575", width=3), fill="tozeroy",
+        fillcolor="rgba(54,133,117,.08)",
+        hovertemplate="Time: %{x:.3g} days<br>Equilibrium uptake: %{y:.2%}<extra></extra>",
+    ))
+    figure.add_hline(y=1.0, line_dash="dash", line_color="#78988e")
+    figure.add_vline(x=soak_days, line_dash="dot", line_color="#c87d55")
+    figure.add_trace(go.Scatter(
+        x=[soak_days], y=[current_uptake], mode="markers", name="Selected soak time",
+        marker=dict(color="#c87d55", size=11, line=dict(color="white", width=2)),
+        hovertemplate=f"Soak time: {t_hours:g} h<br>Equilibrium uptake: %{{y:.2%}}<extra></extra>",
+    ))
+    figure.update_layout(
+        height=370, margin=dict(l=10, r=10, t=15, b=10),
+        xaxis=dict(title="Exposure time (days)", range=[0, end_days]),
+        yaxis=dict(title="Fractional moisture uptake (Mt/M∞)", range=[0, 1.05], tickformat=".0%"),
+        legend=dict(orientation="h", y=1.02, yanchor="bottom", x=0),
+    )
+    st.plotly_chart(figure, width="stretch", key="moisture_uptake_chart")
+    st.caption(f"Selected soak time: {t_hours:g} h · {current_uptake:.2%} of equilibrium uptake. "
+               "100% means this material's own equilibrium capacity, not a mass percentage of water.")
+    st.caption("Prediction for an initially dry, homogeneous sheet exposed on both faces, using the current "
+               "diffusivity and thickness. Diffusivity stays fixed throughout the curve; "
+               "Change in Temperature affects thermal strain only.")
+    if end_days > window_days:
+        st.caption("The time window has been extended to include the selected soak time.")
 
 def run_analytical_stress_pipeline(D, Csat, h, t, beta, alpha_lam, alpha_cu, delta_T, E, nu):
     """Executes the 5-equation hygro-thermo-mechanical analytical pipeline."""
@@ -694,6 +737,8 @@ def render_simulation():
         col3.caption("Unconstrained differential thermal strain: negative indicates copper expands more during heating.")
         col4.metric("Net Stress Index", f"{res['sigma_index']:.2f} MPa")
         col4.caption("Constrained equibiaxial stress: positive denotes in-plane tension; negative denotes compression.")
+
+    render_moisture_uptake(D, h_meters, t_hours, res["Mt_Minf"])
 
     st.write("")
     chart, commentary = st.columns([1.1, 0.9], gap="large")
