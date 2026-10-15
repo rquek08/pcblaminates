@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PCB stack and copper–laminate interface</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; }
+    .viewer { overflow: hidden; padding: 22px 20px 18px; border-radius: 15px;
+      color: #e6f2ec; background: radial-gradient(ellipse at 42% 38%, #1b4247, #10272e 80%); }
+    .eyebrow { margin: 0 0 6px; color: #9bc9bb; font-size: 10px; font-weight: 650; letter-spacing: .16em; }
+    .heading { margin: 0; font-size: 19px; font-weight: 650; }
+    .material { margin: 8px 0 0; color: #b7d1c8; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+    .controls { display: flex; gap: 8px; margin-top: 15px; flex-wrap: wrap; }
+    button { cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; padding: 9px 13px;
+      border-radius: 8px; border: 1px solid #587c76; background: transparent; color: #dfede7; }
+    button[aria-pressed="true"] { background: #dcece3; color: #173f36; border-color: #dcece3; }
+    button:hover { border-color: #b9ded1; }
+    button:focus-visible, [role="button"]:focus-visible { outline: 3px solid #e3bd70; outline-offset: 4px; }
+    .stage { position: relative; width: 100%; aspect-ratio: 680 / 560; margin-top: 6px; }
+    svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+    svg text { font-family: inherit; }
+    .stack, .detail { transition: opacity .45s ease, transform .6s cubic-bezier(.2,.7,.2,1); }
+    .stack { transform-origin: 43% 51%; opacity: 1; }
+    .detail { opacity: 0; transform: scale(.8); transform-origin: center; pointer-events: none; visibility: hidden; }
+    .is-detail .stack { opacity: 0; transform: scale(1.65); pointer-events: none; visibility: hidden; }
+    .is-detail .detail { opacity: 1; transform: scale(1); visibility: visible; }
+    .layer { transition: opacity .2s; }
+    .layer.inspectable { cursor: zoom-in; }
+    .layer.inspectable:hover .face { stroke: #fff1ba; stroke-width: 2.5; }
+    .layer-label { fill: #c6dcd2; font-size: 12px; }
+    .layer-label.selected { fill: #ffe3a7; font-weight: 650; }
+    .leader { fill: none; stroke: #5c827d; stroke-width: 1; }
+    .leader.selected { stroke: #e3bd70; stroke-width: 1.5; }
+    .detail-label { fill: #e6f2ec; font-size: 15px; font-weight: 600; }
+    .detail-note { fill: #a7c9bb; font-size: 12px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 2px; }
+    .chip { border: 1px solid #3d615e; border-radius: 6px; padding: 6px 9px; color: #c8ded4; font-size: 11px; }
+    .status { color: #b7d1c8; font-size: 12px; line-height: 1.55; margin: 12px 0 0; min-height: 38px; }
+    @media (max-width: 380px) { .viewer { padding: 16px 12px; } .heading { font-size: 17px; } }
+    @media (prefers-reduced-motion: reduce) { .stack, .detail, .layer { transition: none; } }
+  </style>
+</head>
+<body>
+  <section class="viewer" aria-label="PCB structure explorer">
+    <p class="eyebrow">PCB STRUCTURE EXPLORER</p>
+    <h3 class="heading">From Board to Bond </h3>
+    <p class="material" id="material"></p>
+    <div class="controls" role="group" aria-label="Structure view">
+      <button type="button" id="overview" aria-pressed="true">Full PCB stack</button>
+      <button type="button" id="zoom" aria-pressed="false">Zoom into interface ↗</button>
+    </div>
+    <div class="stage">
+      <svg class="stack" viewBox="0 0 680 560" role="img" aria-labelledby="stack-title stack-desc">
+        <title id="stack-title">Exploded four-layer PCB stack</title>
+        <desc id="stack-desc">Silkscreen, solder mask, four copper layers, prepreg and a laminate core. The selected core interface is highlighted.</desc>
+        <defs>
+          <pattern id="weave" width="16" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(-16)">
+            <path d="M0 3H16M0 9H16M4 0V12M12 0V12" fill="none" stroke="#b4ce9c" stroke-width="1.2" opacity=".45" />
+          </pattern>
+          <filter id="glow" x="-30%" y="-40%" width="160%" height="180%">
+            <feGaussianBlur stdDeviation="3" />
+          </filter>
+        </defs>
+        <g id="layers"></g>
+        <g id="labels"></g>
+        <text x="670" y="546" text-anchor="end" fill="#90b5a8" font-size="11">EXPLODED VIEW · SPACING EXAGGERATED</text>
+      </svg>
+      <svg class="detail" viewBox="0 0 680 560" role="img" aria-labelledby="detail-title detail-desc" aria-hidden="true">
+        <title id="detail-title">Selected copper–laminate interface close-up</title>
+        <desc id="detail-desc">Cross-section of copper bonded to the selected laminate core. The gold line marks their interface.</desc>
+        <defs>
+          <pattern id="core-weave" width="95" height="44" patternUnits="userSpaceOnUse">
+            <path d="M-5 22Q19 3 43 22T91 22T139 22" fill="none" stroke="#4b7e63" stroke-width="7" />
+            <ellipse cx="19" cy="31" rx="10" ry="3" fill="#4b7e63" />
+            <ellipse cx="67" cy="12" rx="10" ry="3" fill="#4b7e63" />
+          </pattern>
+        </defs>
+        <text x="55" y="110" class="detail-note">CROSS-SECTION · SELECTED CORE INTERFACE</text>
+        <g id="core-section">
+          <rect id="core-resin" x="55" width="440" height="145" fill="#bed1a6" />
+          <rect id="core-glass" x="55" width="440" height="145" fill="url(#core-weave)" />
+          <rect id="foil-section" x="55" width="440" height="30" fill="#d99361" />
+          <line id="bond-line" x1="55" x2="495" stroke="#ffe1a0" stroke-width="4" />
+          <path id="foil-leader" class="leader" />
+          <path id="core-leader" class="leader" />
+          <text id="foil-label" x="538" class="detail-label"></text>
+          <text id="core-label" x="538" class="detail-label">Laminate</text>
+          <text id="core-sublabel" x="538" class="detail-note">Glass + resin</text>
+        </g>
+        <path id="interface-callout" d="" fill="none" stroke="#e3bd70" stroke-width="1.5" />
+        <text x="70" y="400" fill="#ffe1a0" font-size="14" font-weight="600">Copper–laminate bond</text>
+        <text x="70" y="426" class="detail-note">Inspect the two materials at their shared interface.</text>
+        <text x="70" y="486" class="detail-note">ILLUSTRATIVE GEOMETRY · NOT TO SCALE</text>
+      </svg>
+    </div>
+    <div class="chips" aria-label="Selected material properties">
+      <span class="chip" id="thickness"></span>
+      <span class="chip" id="laminate-cte"></span>
+      <span class="chip" id="copper-cte"></span>
+    </div>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+  </section>
+  <script>
+    /* STACK_CONFIG */
+    const viewer = document.querySelector('.viewer');
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const upper = config.interface === 'upper';
+    const selectedFoil = upper ? 4 : 6;
+    const stack = [
+      {label: 'Top silkscreen', fill: '#91bdb1', type: 'silk'},
+      {label: 'Top solder mask', fill: '#388c7b', type: 'mask'},
+      {label: 'L1 · Signal copper', fill: '#bf8955', type: 'copper'},
+      {label: 'Prepreg', fill: '#a3b68b', type: 'glass'},
+      {label: 'L2 · Plane copper', fill: '#cba15f', type: 'plane'},
+      {label: 'Laminate core', fill: '#8da87a', type: 'glass'},
+      {label: 'L3 · Plane copper', fill: '#cba15f', type: 'plane'},
+      {label: 'Prepreg', fill: '#a3b68b', type: 'glass'},
+      {label: 'L4 · Signal copper', fill: '#bf8955', type: 'copper'},
+      {label: 'Bottom solder mask', fill: '#388c7b', type: 'mask'},
+      {label: 'Bottom silkscreen', fill: '#91bdb1', type: 'silk'}
+    ];
+    function node(tag, attrs, parent, text) {
+      const el = document.createElementNS(svgNS, tag);
+      Object.entries(attrs).forEach(([key, value]) => el.setAttribute(key, value));
+      if (text !== undefined) el.textContent = text;
+      parent.appendChild(el);
+      return el;
+    }
+    function point(u, v) { return [245 * u + 140 * v, -70 * u + 45 * v]; }
+    function path(points) { return points.map(([u,v], i) => `${i ? 'L' : 'M'}${point(u,v).join(',')}`).join(' '); }
+    const board = '0,0 245,-70 385,-25 140,45';
+    // Paint from the bottom upwards so an upper plane occludes the plane beneath it.
+    for (let i = stack.length - 1; i >= 0; i--) {
+      const layer = stack[i];
+      const chosen = i === selectedFoil || i === 5;
+      const y = 100 + i * 39;
+      const g = node('g', {transform: `translate(62 ${y})`, class: `layer${chosen ? ' inspectable' : ''}`,
+                           opacity: chosen ? 1 : .72, 'data-layer': i}, document.querySelector('#layers'));
+      if (chosen) {
+        g.setAttribute('role', 'button');
+        g.setAttribute('tabindex', '0');
+        g.setAttribute('aria-label', `Zoom into ${layer.label} and its bonded interface`);
+        g.addEventListener('click', () => setDetail(true));
+        g.addEventListener('keydown', event => {
+          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setDetail(true); }
+        });
+      }
+      node('polygon', {points: '0,0 140,45 385,-25 385,-19 140,51 0,6', fill: '#142e30', opacity: .9}, g);
+      if (chosen) node('polygon', {points: board, fill: 'none', stroke: '#efc779', 'stroke-width': 5,
+                                  opacity: .55, filter: 'url(#glow)'}, g);
+      node('polygon', {points: board, fill: layer.fill, stroke: chosen ? '#ffe1a0' : '#81a898',
+                       'stroke-width': chosen ? 1.8 : .8, class: 'face'}, g);
+      if (layer.type === 'glass') node('polygon', {points: board, fill: 'url(#weave)'}, g);
+      if (layer.type === 'mask' || layer.type === 'copper') {
+        for (let k = 0; k < 6; k++) {
+          const v = .12 + k * .14;
+          node('path', {d: path([[.12,v],[.34,v],[.43,v+.055],[.74,v+.055],[.83,v]]),
+                        fill: 'none', stroke: layer.type === 'mask' ? '#a9decc' : '#ffe3a0',
+                        'stroke-width': 1.3, opacity: .8}, g);
+          const [cx,cy] = point(.83,v);
+          node('ellipse', {cx,cy,rx:4,ry:1.8,fill:'none',stroke:'#d9e4b6','stroke-width':1},g);
+        }
+      } else if (layer.type === 'plane') {
+        for (const u of [.22,.52,.76]) node('path', {d: path([[u,.25],[u+.1,.25],[u+.1,.62],[u,.62]])+' Z',
+                                                    fill:'#244046', stroke:'#ecd398','stroke-width':.8},g);
+      } else if (layer.type === 'silk') {
+        for (const u of [.23,.52,.75]) node('path', {d: path([[u,.25],[u+.12,.25],[u+.12,.65],[u,.65]])+' Z',
+                                                    fill:'none',stroke:'#e6f2ec','stroke-width':1.3},g);
+      }
+      for (const [u,v] of [[.08,.12],[.92,.12],[.08,.88],[.92,.88]]) {
+        const [cx,cy] = point(u,v);
+        node('ellipse', {cx,cy,rx:6,ry:2.8,fill:'#17373b',stroke:'#a3c7b4','stroke-width':1},g);
+      }
+      const labels = document.querySelector('#labels');
+      node('path', {d:`M451 ${y-24} H480 L496 ${y-30} H512`,class:`leader${chosen ? ' selected' : ''}`},labels);
+      node('text', {x:520,y:y-26,class:`layer-label${chosen ? ' selected' : ''}`},labels,layer.label);
+    }
+    document.querySelector('#material').textContent = config.material;
+    document.querySelector('#thickness').textContent = `Core · ${Number(config.thickness).toLocaleString()} mm`;
+    document.querySelector('#laminate-cte').textContent = `Laminate CTE · ${Number(config.laminateCTE).toLocaleString()} ppm/K`;
+    document.querySelector('#copper-cte').textContent = `Copper CTE · ${Number(config.copperCTE).toLocaleString()} ppm/K`;
+    const copperY = upper ? 175 : 320;
+    const coreY = upper ? 205 : 175;
+    const bondY = upper ? 205 : 320;
+    document.querySelector('#foil-section').setAttribute('y', copperY);
+    for (const id of ['core-resin','core-glass']) document.querySelector('#'+id).setAttribute('y', coreY);
+    for (const key of ['y1','y2']) document.querySelector('#bond-line').setAttribute(key,bondY);
+    document.querySelector('#foil-leader').setAttribute('d',`M495 ${copperY+15} H525`);
+    document.querySelector('#core-leader').setAttribute('d',`M495 ${coreY+70} H525`);
+    document.querySelector('#foil-label').setAttribute('y',copperY+20);
+    document.querySelector('#foil-label').textContent = `Copper · ${upper ? 'L2' : 'L3'}`;
+    document.querySelector('#core-label').setAttribute('y',coreY+67);
+    document.querySelector('#core-sublabel').setAttribute('y',coreY+87);
+    document.querySelector('#interface-callout').setAttribute('d',`M78 ${bondY} H40 V375 H70`);
+    const overview = document.querySelector('#overview');
+    const zoom = document.querySelector('#zoom');
+    function setDetail(detail) {
+      viewer.classList.toggle('is-detail', detail);
+      overview.setAttribute('aria-pressed',String(!detail));
+      zoom.setAttribute('aria-pressed',String(detail));
+      document.querySelector('.stack').setAttribute('aria-hidden',String(detail));
+      document.querySelector('.detail').setAttribute('aria-hidden',String(!detail));
+      document.querySelector('#status').textContent = detail
+        ? `${upper ? 'L2 copper above' : 'L3 copper below'} the laminate core. The gold line marks the selected bond.`
+        : 'The gold outlines locate the selected copper–laminate pair. Click either highlighted layer or use the zoom button.';
+    }
+    overview.addEventListener('click',()=>setDetail(false));
+    zoom.addEventListener('click',()=>setDetail(true));
+    document.addEventListener('keydown',event=>{if(event.key==='Escape')setDetail(false);});
+    setDetail(false);
+  </script>
+</body>
+</html>

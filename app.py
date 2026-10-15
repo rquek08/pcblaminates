@@ -13,6 +13,7 @@ for module_name, filename in (("sensitivity_analysis", "sensitivity_analysis.py"
                               ("_pcb_sensitivity_view", "sensitivity_view.py"),
                               ("inverse_analysis", "inverse_analysis.py"),
                               ("laminate_showcase", "laminate_showcase.py"),
+                              ("_pcb_stack_view", "pcb_stack_view.py"),
                               ("_pcb_inverse_view", "inverse_view.py")):
     sensitivity_spec = spec_from_file_location(module_name, Path(__file__).parent / filename)
     sensitivity_module = module_from_spec(sensitivity_spec)
@@ -20,6 +21,7 @@ for module_name, filename in (("sensitivity_analysis", "sensitivity_analysis.py"
     sensitivity_spec.loader.exec_module(sensitivity_module)
 render_sensitivity = sys.modules["_pcb_sensitivity_view"].render_sensitivity
 render_inverse = sys.modules["_pcb_inverse_view"].render_inverse
+render_stack = sys.modules["_pcb_stack_view"].render_stack
 
 # -----------------------------------------------------------------------------
 # Configuration & Constants
@@ -324,7 +326,8 @@ def render_style():
     .st-key-stress_analyser_header h1,
     .st-key-sensitivity_analysis_header h1,
     .st-key-inverse_exploration_header h1 { padding: 0; }
-    .st-key-simulation_scenario .scenario-title {
+    .st-key-simulation_scenario .scenario-title,
+    .st-key-simulation_structure .scenario-title {
         font-size: 2rem; font-weight: 700; padding: 0; margin: 0 0 .5rem; }
     .st-key-simulation_scenario .scenario-preset-heading {
         font-size: 1.65rem; font-weight: 650; padding: 0; margin: .75rem 0 .4rem; }
@@ -569,25 +572,13 @@ def render_simulation_inputs():
         render_exploration_icon(STRESS_ANALYSER_ICON)
         st.title("Stress Analyser")
     st.caption("Choose your material and exposure conditions, then follow the calculation from uptake to stress.")
-    with st.container(border=True, key="simulation_scenario"):
-        st.markdown('<h2 class="scenario-title">Simulation Scenario</h2>', unsafe_allow_html=True)
-        st.caption("Start with a preset or enter your own properties. "
-                   "Moisture properties correspond to the conditioning environment.")
-        st.markdown('<h3 class="scenario-preset-heading">Material Preset</h3>', unsafe_allow_html=True)
-        st.selectbox("Material Preset", list(PRESETS), key="preset_selector",
-                     on_change=load_preset_values, label_visibility="collapsed",
-                     help="Workbook presets load material properties, thickness, soak time, "
-                          "temperature change and copper CTE for the named condition. All remain editable.")
-        metadata = PRESET_METADATA.get(st.session_state["preset_selector"])
-        if metadata:
-            st.caption(f"Materials library reference: {metadata['material_class']} · {metadata['condition']}.")
-            st.caption("Preset material properties are compiled from publicly available manufacturer datasets "
-                       "and technical datasheets for reference. Original sources retain their respective rights.")
-
+    structure, inputs = st.columns([1, 1.05], gap="large")
+    with inputs.container(border=True, key="simulation_scenario"):
         st.markdown('<h3 class="scenario-section-heading">Exposure &amp; Geometry</h3>', unsafe_allow_html=True)
-        temperature, duration, thickness, copper = st.columns(4)
+        temperature, duration = st.columns(2)
         delta_T = temperature.number_input("Delta T (°C or K)", key="field_delta_T", step=5.0)
         t_hours = duration.number_input("Soak Time (hours)", min_value=0.0, key="field_t_hours", step=1.0)
+        thickness, copper = st.columns(2)
         h_mm = thickness.number_input("Laminate Thickness (mm)", min_value=0.001, key="field_h_mm", step=0.1)
         alpha_cu = copper.number_input("Copper Foil CTE (ppm/K)", key="field_alpha_cu", step=0.5)
 
@@ -613,6 +604,21 @@ def render_simulation_inputs():
 
         with st.container(horizontal=True, horizontal_alignment="right"):
             calculate = st.button("Calculate", type="primary", key="calculate_simulation")
+
+    with structure.container(border=True, key="simulation_structure"):
+        st.markdown('<h2 class="scenario-title">Choose your laminate</h2>', unsafe_allow_html=True)
+        st.caption("Start with a preset or enter your own properties. "
+                   "Moisture properties correspond to the conditioning environment.")
+        st.selectbox("Material Preset", list(PRESETS), key="preset_selector",
+                     on_change=load_preset_values, label_visibility="collapsed",
+                     help="Load the selected laminate's properties and conditioning scenario. All inputs remain editable.")
+        render_stack(st.session_state["preset_selector"], h_mm, alpha_lam, alpha_cu)
+        metadata = PRESET_METADATA.get(st.session_state["preset_selector"])
+        if metadata:
+            with st.expander("Material reference"):
+                st.caption(f"{metadata['material_class']} · {metadata['condition']}.")
+                st.caption("Preset properties are compiled from publicly available manufacturer datasets and technical "
+                           "datasheets for reference. Original sources retain their respective rights.")
 
     st.session_state["simulation_inputs"] = {key: st.session_state[key] for key in defaults}
     return (dict(D=D, Csat=Csat, h_mm=h_mm, t_hours=t_hours, beta=beta,
