@@ -7,7 +7,9 @@ from sensitivity_analysis import MATERIAL, PARAMETERS
 
 
 LAYOUTS = {
-    "Balanced": "Two woven-glass plies between similar copper skins: a reference structure for comparison.",
+    "Homogeneous baseline": "A uniform laminate core without glass reinforcement, weave, fillers or additives. "
+                            "Copper foil is shown separately on the outer faces.",
+    "Balanced": "Two woven-glass plies between similar copper skins: a reinforced structure for comparison.",
     "Resin-rich": "An open weave leaves several resin-filled pockets between yarns, where reinforcement is absent.",
     "Glass-dense": "More glass bundles and closer weave spacing illustrate increased reinforcement.",
     "Copper-asymmetric": "Different copper skin thicknesses illustrate an imbalance through the board thickness.",
@@ -71,8 +73,10 @@ FACTORS = {
 
 def structure_figure(layout, focus="All constituents"):
     """Cross-section and plan views with schematic, deliberately unitless geometry."""
+    homogeneous = layout == "Homogeneous baseline"
     figure = make_subplots(rows=1, cols=2, column_widths=[.66, .34],
-                           subplot_titles=["Laminate cross-section", "Weave · plan view"], horizontal_spacing=.08)
+                           subplot_titles=["Laminate cross-section", "Laminate · plan view" if homogeneous else "Weave · plan view"],
+                           horizontal_spacing=.08)
 
     def opacity(factor):
         return 1 if focus in ("All constituents", factor) else .3
@@ -87,10 +91,27 @@ def structure_figure(layout, focus="All constituents"):
     def rectangle(x0, x1, y0, y1, factor, label):
         polygon([x0, x1, x1, x0, x0], [y0, y0, y1, y1, y0], factor, label)
 
-    rectangle(0, 10, .6, 4.7, "Resin matrix", "Resin matrix")
+    def finish(legend_colors):
+        for factor, color in legend_colors.items():
+            figure.add_trace(go.Scatter(x=[None], y=[None], mode="markers", name=factor,
+                                        marker=dict(color=color, size=10)))
+        figure.update_xaxes(visible=False, range=[-.15, 10.15], row=1, col=1)
+        figure.update_yaxes(visible=False, range=[0, 5.65], row=1, col=1)
+        figure.update_xaxes(visible=False, range=[-.2, 10.2], row=1, col=2)
+        figure.update_yaxes(visible=False, range=[-.2, 6.2], scaleanchor="x2", scaleratio=1, row=1, col=2)
+        figure.update_layout(height=390, margin=dict(l=10, r=10, t=45, b=80),
+                              legend=dict(orientation="h", y=-.05), dragmode=False,
+                              plot_bgcolor="rgba(0,0,0,0)")
+        return figure
+
+    rectangle(0, 10, .6, 4.7, "Resin matrix", "Homogeneous laminate" if homogeneous else "Resin matrix")
     rectangle(0, 10, .35, .6, "Copper foil interfaces", "Bottom copper foil")
     rectangle(0, 10, 4.7, 5.35 if layout == "Copper-asymmetric" else 4.95,
               "Copper foil interfaces", "Top copper foil")
+    if homogeneous:
+        polygon([0, 10, 10, 0, 0], [0, 0, 6, 6, 0], "Resin matrix", "Homogeneous laminate", col=2)
+        return finish({"Homogeneous laminate": COLORS["Resin matrix"],
+                       "Copper foil interfaces": COLORS["Copper foil interfaces"]})
     # Both views share the same yarn pitch and x positions. Use data-space
     # ribbons, so crossing patches stay aligned when the chart is resized.
     pitch = 1.8 if layout == "Resin-rich" else 1.0 if layout == "Glass-dense" else 1.5
@@ -170,17 +191,7 @@ def structure_figure(layout, focus="All constituents"):
                     "Resin matrix", label, col=2, color="#f4dda8", outline=outline)
             figure.add_annotation(x=midpoint, y=pocket_y, text=f"R{number}", showarrow=False,
                                   font=dict(size=10, color="#735121"), row=1, col=2)
-    for factor, color in COLORS.items():
-        figure.add_trace(go.Scatter(x=[None], y=[None], mode="markers", name=factor,
-                                    marker=dict(color=color, size=10)))
-    figure.update_xaxes(visible=False, range=[-.15, 10.15], row=1, col=1)
-    figure.update_yaxes(visible=False, range=[0, 5.65], row=1, col=1)
-    figure.update_xaxes(visible=False, range=[-.2, 10.2], row=1, col=2)
-    figure.update_yaxes(visible=False, range=[-.2, 6.2], scaleanchor="x2", scaleratio=1, row=1, col=2)
-    figure.update_layout(height=390, margin=dict(l=10, r=10, t=45, b=80),
-                          legend=dict(orientation="h", y=-.05), dragmode=False,
-                          plot_bgcolor="rgba(0,0,0,0)")
-    return figure
+    return finish(COLORS)
 
 
 def render_showcase():
@@ -189,18 +200,27 @@ def render_showcase():
     layout = st.radio("Structure concept", list(LAYOUTS), horizontal=True,
                       key="inverse_structure_layout", persist_state="session")
     st.write(LAYOUTS[layout])
-    focus = st.selectbox("Highlight a constituent", ["All constituents", *FACTORS], key="inverse_structure_focus")
+    homogeneous = layout == "Homogeneous baseline"
+    focus_options = (["All constituents", "Resin matrix", "Copper foil interfaces"] if homogeneous else
+                     ["All constituents", *FACTORS])
+    if st.session_state.get("inverse_structure_focus") not in focus_options:
+        st.session_state.pop("inverse_structure_focus", None)
+    focus = st.selectbox("Highlight a constituent", focus_options, key="inverse_structure_focus")
     st.plotly_chart(structure_figure(layout, focus), width="stretch", key="inverse_structure_figure",
                     config=dict(displayModeBar=False))
     st.caption("Conceptual schematics, not to scale. Yarn shapes, particle size and foil thickness are illustrative. "
                "These layouts do not change the recommender's material properties or predict a stress field.")
+    if homogeneous:
+        st.caption("The baseline core is uniform throughout. Select another structure concept to introduce reinforcement, "
+                   "resin-rich regions, fillers or copper asymmetry.")
     if layout == "Resin-rich":
         st.caption("R1–R3 mark resin-filled gaps between the glass yarns. Their boundaries follow the weave; "
                    "no reinforcement passes through the highlighted pockets.")
     if layout == "Copper-asymmetric":
         st.markdown("Asymmetric PCB lay-ups can produce bow and twist through stiffness and loading imbalance. "
                     "[PCB constituent and multilayer study](https://doi.org/10.1007/s10854-017-8449-2).")
-    factor = st.radio("Explore a factor", list(FACTORS), horizontal=True, key="inverse_structure_factor")
+    factor = st.radio("Explore a factor to add" if homogeneous else "Explore a factor", list(FACTORS),
+                      horizontal=True, key="inverse_structure_factor")
     note = FACTORS[factor]
     behaviour, research = st.columns(2, gap="large", border=True)
     with behaviour:
