@@ -23,7 +23,7 @@ PARAMETERS = {
 }
 EXPOSURE = ["delta_T", "t_hours", "h_mm"]
 MATERIAL = [key for key in PARAMETERS if key not in EXPOSURE]
-STUDIES = ["A · Exposure conditions", "B · Material properties", "Combined · All parameters"]
+STUDIES = ["A · Exposure conditions & geometry", "B · Material properties", "Combined · All parameters"]
 FIXED_META = {key: value[:2] for key, value in PARAMETERS.items()}
 FIXED_META.update(alpha_cu=("Copper CTE", "ppm/K"))
 OUTPUTS = {
