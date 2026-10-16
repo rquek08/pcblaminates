@@ -261,7 +261,7 @@ def select_structure_context():
 
 
 def render_showcase():
-    st.subheader("What about inhomogeneous laminates and copper interfaces?")
+    st.subheader("Inhomogeneity in application")
     st.caption("Explore constituent layouts and the research connecting structure, properties and stress.")
     if st.session_state.get("inverse_structure_layout") == "Copper-asymmetric":
         st.session_state["inverse_structure_layout"] = "Copper interfaces"
