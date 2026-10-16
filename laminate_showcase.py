@@ -317,7 +317,7 @@ def render_showcase():
             st.markdown(f"[{study['title']}]({study['source']})")
             if study.get("scope"):
                 st.caption(study["scope"])
-    with st.expander("Research across all five factors"):
+    with st.expander("Reference Links"):
         for name, entry in FACTORS.items():
             label = "Resin matrix and resin-rich regions" if name == "Resin matrix" else name
             st.markdown(f"**{label}**")
