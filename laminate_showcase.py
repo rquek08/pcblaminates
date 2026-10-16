@@ -12,7 +12,8 @@ LAYOUTS = {
     "Balanced": "Two woven-glass plies between similar copper skins: a reinforced structure for comparison.",
     "Resin-rich": "An open weave leaves several resin-filled pockets between yarns, where reinforcement is absent.",
     "Glass-dense": "More glass bundles and closer weave spacing illustrate increased reinforcement.",
-    "Copper-asymmetric": "Different copper skin thicknesses illustrate an imbalance through the board thickness.",
+    "Copper interfaces": "A flat laminate cross-section shows small copper tabs on the top and bottom surfaces, "
+                         "with narrow vertical copper features extending into the laminate.",
     "Filled matrix": "Dispersed particles illustrate a resin formulation containing fillers or additives.",
 }
 COLORS = {"Glass fiber reinforcement": "#368575", "Resin matrix": "#e7c887",
@@ -54,12 +55,14 @@ FACTORS = {
         limit="The app uses one effective in-plane modulus and CTE; it does not resolve warp/fill anisotropy or crimp."),
     "Copper foil interfaces": dict(
         properties=["alpha_lam", "E"],
-        effect="Copper distribution changes stack balance. Foil surface treatment and resin bonding also govern adhesion.",
+        effect="Copper traces bonded to the laminate transfer thermal-expansion mismatch through their interfaces. "
+               "Copper surface treatment and resin bonding also govern adhesion.",
         evidence="90° peel tests on copper/glass-epoxy specimens showed that foil roughness affected peel strength "
                  "and local load variation through mechanical anchoring.",
         source="https://doi.org/10.1163/156855402320257320",
         title="Ikegawa et al. · Copper/laminate adhesion (2002)",
-        limit="The stress index includes copper CTE, but foil thickness, roughness and adhesion strength need a separate interface model."),
+        limit="The stress index includes copper CTE, but trace geometry, local edge stresses, roughness and adhesion strength "
+              "need a separate interface model."),
     "Fillers and additives": dict(
         properties=["alpha_lam", "E", "Csat", "D"],
         effect="Filler type, loading and dispersion change matrix properties. Benefits and tradeoffs depend on the formulation.",
@@ -74,8 +77,9 @@ FACTORS = {
 def structure_figure(layout, focus="All constituents"):
     """Cross-section and plan views with schematic, deliberately unitless geometry."""
     homogeneous = layout == "Homogeneous baseline"
+    copper_interface = layout == "Copper interfaces"
     figure = make_subplots(rows=1, cols=2, column_widths=[.66, .34],
-                           subplot_titles=["Laminate cross-section", "Laminate · plan view" if homogeneous else "Weave · plan view"],
+                           subplot_titles=["Laminate cross-section", "Laminate · plan view" if homogeneous or copper_interface else "Weave · plan view"],
                            horizontal_spacing=.08)
 
     def opacity(factor):
@@ -88,8 +92,8 @@ def structure_figure(layout, focus="All constituents"):
                                     line=outline or dict(color=color, width=0), name=label,
                                     hovertemplate=label + "<extra></extra>", showlegend=False), row=1, col=col)
 
-    def rectangle(x0, x1, y0, y1, factor, label):
-        polygon([x0, x1, x1, x0, x0], [y0, y0, y1, y1, y0], factor, label)
+    def rectangle(x0, x1, y0, y1, factor, label, col=1):
+        polygon([x0, x1, x1, x0, x0], [y0, y0, y1, y1, y0], factor, label, col=col)
 
     def finish(legend_colors):
         for factor, color in legend_colors.items():
@@ -104,10 +108,30 @@ def structure_figure(layout, focus="All constituents"):
                               plot_bgcolor="rgba(0,0,0,0)")
         return figure
 
-    rectangle(0, 10, .6, 4.7, "Resin matrix", "Homogeneous laminate" if homogeneous else "Resin matrix")
+    rectangle(0, 10, .6, 4.7, "Resin matrix", "Homogeneous laminate" if homogeneous or copper_interface else "Resin matrix")
+    if copper_interface:
+        top_tabs = ((.8, 2.0), (2.8, 3.9), (4.6, 5.8), (7.0, 8.2), (9.0, 9.7))
+        for left, right in top_tabs:
+            rectangle(left, right, 4.7, 4.95, "Copper foil interfaces", "Top surface copper tab")
+        for left, right in ((.5, 1.55), (2.5, 3.7), (4.6, 5.8), (7.1, 8.3), (9.1, 9.8)):
+            rectangle(left, right, .35, .6, "Copper foil interfaces", "Bottom surface copper tab")
+        rectangle(1.32, 1.47, 3.2, 4.7, "Copper foil interfaces", "Vertical copper feature from top surface")
+        rectangle(7.65, 7.80, .6, 2.0, "Copper foil interfaces", "Vertical copper feature from bottom surface")
+        rectangle(5.12, 5.28, .6, 4.7, "Copper foil interfaces", "Through-thickness copper connection")
+        rectangle(0, 10, 0, 6, "Resin matrix", "Homogeneous laminate · top view", col=2)
+        for left, right in top_tabs:
+            rectangle(left, right, 2.25, 3.75, "Copper foil interfaces", "Top surface copper tab · plan view", col=2)
+        figure.add_trace(go.Scatter(x=[0, 10], y=[3, 3], mode="lines",
+                                    line=dict(color="#78988e", width=1, dash="dash"),
+                                    showlegend=False, hovertemplate="Cross-section position<extra></extra>"), row=1, col=2)
+        figure.add_trace(go.Scatter(x=[1.395, 5.2], y=[3, 3], mode="markers",
+                                    marker=dict(size=7, color="#8d5036", symbol="circle-open", line=dict(width=1.5)),
+                                    opacity=opacity("Copper foil interfaces"), showlegend=False,
+                                    hovertemplate="Vertical copper feature beneath this tab<extra></extra>"), row=1, col=2)
+        return finish({"Homogeneous laminate": COLORS["Resin matrix"],
+                       "Copper foil interfaces": COLORS["Copper foil interfaces"]})
     rectangle(0, 10, .35, .6, "Copper foil interfaces", "Bottom copper foil")
-    rectangle(0, 10, 4.7, 5.35 if layout == "Copper-asymmetric" else 4.95,
-              "Copper foil interfaces", "Top copper foil")
+    rectangle(0, 10, 4.7, 4.95, "Copper foil interfaces", "Top copper foil")
     if homogeneous:
         polygon([0, 10, 10, 0, 0], [0, 0, 6, 6, 0], "Resin matrix", "Homogeneous laminate", col=2)
         return finish({"Homogeneous laminate": COLORS["Resin matrix"],
@@ -194,14 +218,22 @@ def structure_figure(layout, focus="All constituents"):
     return finish(COLORS)
 
 
+def select_structure_context():
+    if st.session_state.get("inverse_structure_layout") == "Copper interfaces":
+        st.session_state["inverse_structure_factor"] = "Copper foil interfaces"
+
+
 def render_showcase():
     st.subheader("Laminate structure showcase")
     st.caption("Explore constituent layouts and the research connecting structure, properties and stress.")
+    if st.session_state.get("inverse_structure_layout") == "Copper-asymmetric":
+        st.session_state["inverse_structure_layout"] = "Copper interfaces"
+        st.session_state["inverse_structure_factor"] = "Copper foil interfaces"
     layout = st.radio("Structure concept", list(LAYOUTS), horizontal=True,
-                      key="inverse_structure_layout", persist_state="session")
+                      key="inverse_structure_layout", persist_state="session", on_change=select_structure_context)
     st.write(LAYOUTS[layout])
     homogeneous = layout == "Homogeneous baseline"
-    focus_options = (["All constituents", "Resin matrix", "Copper foil interfaces"] if homogeneous else
+    focus_options = (["All constituents", "Resin matrix", "Copper foil interfaces"] if homogeneous or layout == "Copper interfaces" else
                      ["All constituents", *FACTORS])
     if st.session_state.get("inverse_structure_focus") not in focus_options:
         st.session_state.pop("inverse_structure_focus", None)
@@ -212,13 +244,13 @@ def render_showcase():
                "These layouts do not change the recommender's material properties or predict a stress field.")
     if homogeneous:
         st.caption("The baseline core is uniform throughout. Select another structure concept to introduce reinforcement, "
-                   "resin-rich regions, fillers or copper asymmetry.")
+                   "resin-rich regions, fillers or patterned copper interfaces.")
     if layout == "Resin-rich":
         st.caption("R1–R3 mark resin-filled gaps between the glass yarns. Their boundaries follow the weave; "
                    "no reinforcement passes through the highlighted pockets.")
-    if layout == "Copper-asymmetric":
-        st.markdown("Asymmetric PCB lay-ups can produce bow and twist through stiffness and loading imbalance. "
-                    "[PCB constituent and multilayer study](https://doi.org/10.1007/s10854-017-8449-2).")
+    if layout == "Copper interfaces":
+        st.caption("The plan view shows top-surface copper tabs; the dashed line marks the cross-section position. "
+                   "The cross-section also exposes bottom tabs and vertical copper features. The laminate is uniform, without glass weave.")
     factor = st.radio("Explore a factor to add" if homogeneous else "Explore a factor", list(FACTORS),
                       horizontal=True, key="inverse_structure_factor")
     note = FACTORS[factor]
