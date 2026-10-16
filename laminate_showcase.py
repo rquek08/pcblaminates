@@ -21,58 +21,95 @@ COLORS = {"Glass fiber reinforcement": "#368575", "Resin matrix": "#e7c887",
           "Fillers and additives": "#7384b0"}
 FACTORS = {
     "Glass fiber reinforcement": dict(
-        properties=["E", "alpha_lam", "nu"],
-        effect="Glass content and direction change the laminate's effective stiffness and thermal expansion. "
-               "More stiffness can also raise the stress index for the same mismatch strain.",
-        evidence="PCB experiments and modelling found that reinforcement type and fiber volume fraction "
-                 "change the measured Young's modulus and CTE.",
-        source="https://doi.org/10.1007/s10854-017-8449-2", title="Veldhuijzen van Zanten et al. · PCB constituent properties (2018)",
-        limit="Bulk directional properties must be measured for the actual glass-to-resin ratio."),
+        properties=["E", "alpha_lam"],
+        effect="Glass volume fraction and fibre orientation change how strongly the reinforcement constrains the resin. "
+               "This changes the laminate's effective directional stiffness and thermal expansion. In the model, with "
+               "Poisson's ratio held fixed, greater modulus increases the stress-index magnitude for the same net mismatch "
+               "strain. Changing laminate CTE changes the thermal mismatch with copper.\n\n"
+               "Lower laminate CTE does not automatically mean lower mismatch: the relevant quantity is its difference "
+               "from copper's CTE.",
+        parameter_note="Related model parameters: E and αlam. Use values for the relevant material direction.",
+        evidence="Veldhuijzen van Zanten et al. (2018) combined PCB experiments with micromechanical modelling. "
+                 "Across the constructions studied, effective Young's modulus ranged from 11–31 GPa and CTE from "
+                 "10–28 ppm/K, depending on reinforcement and fibre volume fraction.",
+        scope="These are study-specific ranges, not universal material bounds.",
+        title="Veldhuijzen van Zanten et al. (2018) · Method to determine thermoelastic material properties of constituent "
+              "and copper-patterned layers of multilayer printed circuit boards",
+        source="https://doi.org/10.1007/s10854-017-8449-2",
+        limit="The model uses effective material properties; it does not calculate them from glass volume fraction or resolve local fibre restraint."),
     "Resin matrix": dict(
-        properties=["beta", "Csat", "D", "E"],
-        effect="At equal matrix moisture content, less fiber restraint can permit greater local swelling.",
-        mechanism=[
-            "Epoxy absorbs water and swells; glass is treated as non-swelling. Fiber restraint suppresses axial swelling much more than transverse swelling.",
-        ],
-        evidence="Experiments and models show strongly directional swelling in glass/epoxy.",
-        complications=[
-            "Restraint produces interface mismatch stresses; uneven moisture uptake may promote microcracking.",
-            "Fiber arrangement changes local swelling; bulk averages can hide it.",
-            "The introduction also links swelling to reduced matrix strength.",
-            "Interpretation: greater free swelling alone does not establish greater stress or damage.",
-        ],
-        scope="60°C water immersion; not a PCB-pocket test. Linear elasticity; interface imperfections neglected.",
-        units="Paper coefficients use moisture mass percentages, not the app's kg/m³ basis.",
-        source="https://www.mdpi.com/2504-477X/3/1/10",
-        title="Krauklis, Gagani & Echtermeyer · Orthotropic hygroscopic swelling (2019)",
-        limit="The app does not resolve local restraint or directional swelling."),
+        properties=["D", "Csat", "beta", "E", "alpha_lam"],
+        effect="Resin chemistry and the cured network influence water mobility, equilibrium absorption and swelling. "
+               "These affect D, Csat and β, changing the time-dependent hygroscopic contribution. Resin chemistry "
+               "and conditioning can also change stiffness and thermal behaviour.\n\n"
+               "The direction of these changes must be established experimentally. Crosslink density alone does not "
+               "reliably predict diffusivity.",
+        parameter_note="Related model parameters: D, Csat, β, E and αlam.",
+        evidence="Toscano et al. (2016) studied DGEBA/DDS and DGEBF/DDS epoxies in water at 50°C and 80°C, "
+                 "using gravimetry, dynamic mechanical analysis and photoelastic stress measurements. The more highly "
+                 "crosslinked DGEBA system had higher diffusivity and equilibrium uptake. The two systems developed "
+                 "comparable peak swelling stresses but different stress-development kinetics.",
+        scope="These were neat-resin specimens. The findings support mechanisms rather than directly supplying "
+              "properties for a glass-reinforced laminate or a resin-rich pocket.",
+        title="Toscano et al. (2016) · Water diffusion and swelling stresses in highly crosslinked epoxy matrices",
+        source="https://doi.org/10.1016/j.polymdegradstab.2016.09.004",
+        limit="The constant-property model does not capture moisture-induced stiffness changes or local stress gradients around resin-rich regions."),
     "Glass weave architecture": dict(
-        properties=["E", "alpha_lam", "nu"],
-        effect="Warp/fill spacing and yarn crimp change directional reinforcement and the local stress distribution.",
-        evidence="Finite-element research on woven glass/epoxy found weave-dependent interior and edge stresses "
-                 "under cryogenic conditions. Those results do not establish the ranking of PCB weaves at service temperatures.",
-        source="https://doi.org/10.1520/STP10414S", title="Kriz · Edge stresses in woven laminates (1989)",
-        limit="The app uses one effective in-plane modulus and CTE; it does not resolve warp/fill anisotropy or crimp."),
+        properties=["E", "nu", "alpha_lam"],
+        effect="Warp/fill yarn arrangement and fibre crimp change the reinforcement in each direction. This produces "
+               "directional differences in effective modulus, Poisson's ratio and CTE. Consequently, the calculated "
+               "stress index can differ between the laminate's x and y directions when direction-specific inputs are used.\n\n"
+               "The evidence supports directional thermoelastic properties. A specific weave should not be claimed "
+               "to reduce diffusivity without supporting transport measurements.",
+        parameter_note="Related model parameters: direction-specific E, ν and αlam.",
+        evidence="Sottos, Ockers and Swindeman (1999) characterised woven glass/epoxy boards using optical microscopy, "
+                 "tensile testing and thermomechanical analysis above and below the glass-transition temperature Tg. "
+                 "They measured elastic moduli, Poisson's ratios and CTEs, compared them with analytical models, "
+                 "and investigated the effect of fibre crimp.",
+        scope="The study concerns woven glass/epoxy circuit-board substrates; its thermoelastic results do not establish a weave-dependent diffusion ranking.",
+        title="Sottos, Ockers & Swindeman (1999) · Thermoelastic properties of plain weave composites for multilayer circuit board applications",
+        source="https://doi.org/10.1115/1.2792659",
+        limit="The effective-property model does not resolve local stresses around individual yarns or resin pockets."),
     "Copper foil interfaces": dict(
-        properties=["alpha_lam", "E"],
-        effect="Copper traces bonded to the laminate transfer thermal-expansion mismatch through their interfaces. "
-               "Copper surface treatment and resin bonding also govern adhesion.",
-        evidence="90° peel tests on copper/glass-epoxy specimens showed that foil roughness affected peel strength "
-                 "and local load variation through mechanical anchoring.",
-        source="https://doi.org/10.1163/156855402320257320",
-        title="Ikegawa et al. · Copper/laminate adhesion (2002)",
-        limit="The stress index includes copper CTE, but trace geometry, local edge stresses, roughness and adhesion strength "
-              "need a separate interface model."),
+        properties=["alpha_cu"],
+        effect="Copper coverage changes the surfaces available for moisture entry, affecting moisture distribution "
+               "and subsequent swelling. This is primarily a diffusion-boundary-condition effect, rather than a change "
+               "in the laminate's intrinsic diffusivity.\n\n"
+               "Interface condition also affects adhesion and resistance to separation. This is a separate pathway "
+               "to delamination that the current stress index does not calculate.",
+        parameter_note="Related model input: copper CTE (αCu). Moisture-exposure geometry is a boundary-condition consideration.",
+        evidence="Weide-Zaage, Horaud and Frémont (2005) compared PCB moisture measurements with finite-element "
+                 "simulations. Copper layers acted as diffusion barriers, changing moisture distributions and drying behaviour.",
+        title="Weide-Zaage, Horaud & Frémont (2005) · Moisture diffusion in printed circuit boards: Measurements and finite-element simulations",
+        source="https://doi.org/10.1016/j.microrel.2005.07.077",
+        additional_research=[dict(
+            evidence="Chan and Yuen (2009) examined epoxy–copper specimens conditioned for up to 1,000 hours at "
+                     "85°C/85% RH. Interfacial moisture measurements and fracture-surface analysis linked transport "
+                     "along the interface and changes in its cuprous oxide region to adhesion degradation in that system.",
+            title="Chan & Yuen (2009) · Study of interfacial moisture diffusion at epoxy/Cu interface",
+            source="https://doi.org/10.1163/156856109X433982",
+            scope="The interfacial findings apply to the tested epoxy/copper system; they are not a universal adhesion-degradation law.",
+        )],
+        limit="The uptake model assumes a sheet exposed on both faces. Copper coverage barriers, adhesion degradation, "
+              "copper load sharing and local interface stresses are outside the current stress index."),
     "Fillers and additives": dict(
-        properties=["alpha_lam", "E", "Csat", "D"],
-        effect="Filler type, loading and dispersion change matrix properties. Benefits and tradeoffs depend on the formulation.",
-        evidence="Experiments on two silica-filled epoxy systems found lower CTE and higher stiffness and toughness. "
-                 "Moisture absorption was also measured; results cannot be transferred directly to a commercial PCB grade.",
+        properties=["E", "alpha_lam", "D", "Csat"],
+        effect="Filler chemistry, loading and dispersion can change stiffness, CTE and moisture transport. "
+               "In suitable silica-filled epoxies, changes in CTE and water uptake alter the thermal and hygroscopic "
+               "contributions, while increased stiffness raises the stress scale for a given net mismatch.\n\n"
+               "These effects compete, so more filler does not guarantee a smaller combined stress index. "
+               "Lower CTE is beneficial for thermal mismatch only when it brings the laminate CTE closer to copper's CTE.",
+        parameter_note="Related model parameters: E, αlam, D and Csat. A change in β requires separate swelling evidence.",
+        evidence="Dittanet, Pearson and Kongkachuichay (2017) tested approximately 20 nm silica particles in DGEBF "
+                 "and cycloaliphatic epoxies. Increasing filler content reduced CTE, moisture uptake and diffusivity, "
+                 "and increased modulus in those formulations. At 85°C/85% RH, DGEBF equilibrium mass uptake "
+                 "decreased from approximately 1.25% without filler to 0.84% at 35 wt% silica.",
+        scope="The findings concern those silica-filled systems, not every filler or additive. Mass-uptake percentages "
+              "require a consistent density and concentration basis before use as Csat.",
+        title="Dittanet, Pearson & Kongkachuichay (2017) · Thermo-mechanical behaviors and moisture absorption of silica nanoparticle reinforcement in epoxy resins",
         source="https://doi.org/10.1016/j.ijadhadh.2017.06.006",
-        title="Dittanet et al. · Silica-filled epoxy properties (2017)",
-        limit="The app has no filler-to-property conversion. Use measured properties for a specific formulation."),
+        limit="The model requires measured effective properties for a filled formulation; it does not infer them from filler loading."),
 }
-
 
 def structure_figure(layout, focus="All constituents"):
     """Cross-section and plan views with schematic, deliberately unitless geometry."""
@@ -252,6 +289,7 @@ def render_showcase():
         st.caption("The plan view shows top-surface copper tabs; the dashed line marks the cross-section position. "
                    "The cross-section also exposes bottom tabs and vertical copper features. The laminate is uniform, without glass weave.")
     factor = st.radio("Explore a factor to add" if homogeneous else "Explore a factor", list(FACTORS),
+                      format_func=lambda name: "Resin matrix and resin-rich regions" if name == "Resin matrix" else name,
                       horizontal=True, key="inverse_structure_factor")
     note = FACTORS[factor]
     behaviour, research = st.columns(2, gap="large", border=True)
@@ -260,7 +298,7 @@ def render_showcase():
         st.write(note["effect"])
         for point in note.get("mechanism", []):
             st.markdown(f"- {point}")
-        st.caption("Related app parameters: " + ", ".join(note["properties"]))
+        st.caption(note["parameter_note"])
         saved = st.session_state.get("sensitivity_result")
         if saved and saved["signature"] == st.session_state.get("sensitivity_current_signature"):
             # Display the bridge to the ranking without translating structure into invented values.
@@ -268,21 +306,22 @@ def render_showcase():
             top_keys = material[material["Parameter"].isin(MATERIAL)].nlargest(3, "ST")["Parameter"].tolist()
             relevant = [key for key in note["properties"] if key in top_keys]
             if relevant:
-                st.info("Related to your leading sensitivity parameters: " + ", ".join(PARAMETERS[key][0] for key in relevant))
+                st.info("Related to the leading sensitivity parameters: " + ", ".join(PARAMETERS[key][0] for key in relevant))
         st.caption(note["limit"])
         if note.get("units"):
             st.caption(note["units"])
     with research:
         st.markdown("**Research evidence**")
-        st.write(note["evidence"])
-        if note.get("complications"):
-            st.markdown("**Complications of swelling**")
-            for point in note["complications"]:
-                st.markdown(f"- {point}")
-            st.caption(note["scope"])
-        st.markdown(f"[{note['title']}]({note['source']})")
+        for study in [note, *note.get("additional_research", [])]:
+            st.write(study["evidence"])
+            st.markdown(f"[{study['title']}]({study['source']})")
+            if study.get("scope"):
+                st.caption(study["scope"])
     with st.expander("Research across all five factors"):
         for name, entry in FACTORS.items():
-            st.markdown(f"**{name}** — {entry['evidence']} [{entry['title']}]({entry['source']})")
+            label = "Resin matrix and resin-rich regions" if name == "Resin matrix" else name
+            st.markdown(f"**{label}**")
+            for study in [entry, *entry.get("additional_research", [])]:
+                st.markdown(f"[{study['title']}]({study['source']})")
     st.caption("For quantitative layout comparison, the next step is measured constituent properties plus "
                "a laminate or interface model that resolves direction, layer sequence and local geometry.")
