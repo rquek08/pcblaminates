@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How the sensitivity inputs affect strain and stress</title>
+  <link rel="stylesheet" href="../static/typography.css">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #243e38; font-family: var(--pcb-body-font); }
+    button { font: inherit; cursor: pointer; }
+    button:focus-visible { outline: 3px solid #368575; outline-offset: 4px; }
+    .guide {
+      --accent: #368575;
+      padding: 24px; border: 1px solid #dce7e2; border-radius: 20px;
+      background: linear-gradient(125deg, #f5f9f6, #fdfcf9);
+    }
+    .pathway { margin-top: 24px; }
+    .pathway + .pathway { padding-top: 22px; border-top: 1px solid #dce5dd; }
+    .pathway.thermal { --accent: #a7643b; }
+    .pathway.stress { --accent: #6d7255; }
+    .path-label { margin: 0 0 9px; color: var(--accent); font-size: 11px; font-weight: 650; letter-spacing: .5px; }
+    .heading-row { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+    h2 { margin: 0; font-size: 27px; line-height: 1.15; }
+    .intro { margin: 8px 0 0; max-width: 720px; color: #60756d; font-size: 13px; line-height: 1.5; }
+    .motion-control {
+      flex-shrink: 0; border: 1px solid #d5dfd8; border-radius: 999px;
+      background: #fff9; padding: 7px 11px; color: #60756d; font-size: 11px;
+    }
+    .scene-row {
+      display: grid; grid-template-columns: minmax(190px, .8fr) minmax(290px, 1.6fr);
+      gap: 22px; align-items: center;
+    }
+    .path-heading { margin: 0 0 7px; font-size: 21px; }
+    .path-copy { margin: 0; color: #60756d; font-size: 13px; line-height: 1.6; }
+    .scene { width: 100%; max-height: 155px; display: block; overflow: visible; }
+    .scene text { font-family: var(--pcb-body-font); fill: #53685e; font-size: 11px; }
+    .scene .stage-label { fill: #243e38; font-weight: 600; font-size: 12px; }
+    .scene .arrow { stroke: #9aada1; stroke-width: 1.5; fill: none; }
+    .stage-halo { fill: #368575; opacity: 0; transition: opacity .25s; }
+    .guide[data-stage="uptake"] .stage-uptake .stage-halo,
+    .guide[data-stage="concentration"] .stage-concentration .stage-halo,
+    .guide[data-stage="swelling"] .stage-swelling .stage-halo { opacity: .06; }
+    .water-dot { fill: #368575; animation: absorb 3.8s ease-in-out infinite; }
+    .water-dot.bottom { animation-name: absorb-bottom; }
+    .water-dot.offset { animation-delay: -.9s; }
+    .water-dot.late { animation-delay: -1.8s; }
+    .water-fill { animation: water-pulse 3.8s ease-in-out infinite; }
+    .swelling-block { transform-box: fill-box; transform-origin: center; animation: swell 3.8s ease-in-out infinite; }
+    .thermal-bar { transform-box: fill-box; transform-origin: left center; animation: warm-laminate 4.6s ease-in-out infinite; }
+    .thermal-bar.copper { animation-name: warm-copper; }
+    .stress-bar { transform-box: fill-box; transform-origin: left center; animation: stress-scale 3.8s ease-in-out infinite; }
+    .factors { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 9px; margin-top: 16px; }
+    .factors.short { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .factor {
+      display: flex; flex-direction: column; align-items: start; gap: 7px; text-align: left;
+      min-height: 128px; padding: 13px 12px; background: #ffffffb8;
+      border: 1px solid #dce5dd; border-radius: 12px; color: #243e38;
+      transition: transform .18s, border-color .18s, box-shadow .18s;
+      animation: appear .35s ease-out both;
+    }
+    .factor:nth-child(2) { animation-delay: .04s; }
+    .factor:nth-child(3) { animation-delay: .08s; }
+    .factor:nth-child(4) { animation-delay: .12s; }
+    .factor:nth-child(5) { animation-delay: .16s; }
+    .factor:hover { transform: translateY(-3px); border-color: var(--accent); }
+    .factor:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+    .factor[data-highlighted="true"] { border-color: var(--accent); box-shadow: inset 0 3px var(--accent); background: white; }
+    .factor-name { font-size: 12px; font-weight: 650; line-height: 1.4; }
+    .factor-role { color: var(--accent); font-size: 10px; }
+    .factor-description { margin: 0; color: #53685e; font-size: 11px; line-height: 1.55; }
+    .paused .scene * { animation-play-state: paused !important; }
+    @keyframes absorb { 0%, 12% { transform: translateY(-16px); opacity: 0; } 40% { opacity: .9; } 85%, 100% { transform: translateY(25px); opacity: 0; } }
+    @keyframes absorb-bottom { 0%, 12% { transform: translateY(16px); opacity: 0; } 40% { opacity: .9; } 85%, 100% { transform: translateY(-25px); opacity: 0; } }
+    @keyframes water-pulse { 0%, 100% { opacity: .18; } 55% { opacity: .75; } }
+    @keyframes swell { 0%, 100% { transform: scaleX(1); } 55% { transform: scaleX(1.18); } }
+    @keyframes warm-laminate { 0%, 100% { transform: scaleX(1); } 55% { transform: scaleX(1.12); } }
+    @keyframes warm-copper { 0%, 100% { transform: scaleX(1); } 55% { transform: scaleX(1.25); } }
+    @keyframes stress-scale { 0%, 100% { transform: scaleX(.75); } 55% { transform: scaleX(1.15); } }
+    @keyframes appear { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    @media (max-width: 700px) {
+      .guide { padding: 18px; }
+      .scene-row { grid-template-columns: 1fr; gap: 8px; }
+      .scene { max-height: 170px; }
+      .factors { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .factor { min-height: 124px; }
+      h2 { font-size: 24px; }
+      .motion-control { font-size: 10px; padding: 6px 9px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+      .water-dot { opacity: .7; }
+      .water-fill { opacity: .5; }
+      .motion-control { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <section class="guide" data-stage="uptake" aria-labelledby="guide-heading">
+    <div class="heading-row">
+      <div>
+        <h2 id="guide-heading">What are we varying?</h2>
+        <p class="intro">Follow the two strain pathways, then see how stiffness turns their combined mismatch into a stress index.</p>
+      </div>
+      <button class="motion-control" type="button" aria-pressed="false">Pause animation</button>
+    </div>
+    <section id="panel-moisture" class="pathway moisture" aria-labelledby="heading-moisture">
+      <div class="scene-row">
+        <div>
+          <p class="path-label">01 · Moisture swelling</p>
+          <h3 id="heading-moisture" class="path-heading">Water enters and laminate swells.</h3>
+          <p class="path-copy">Five inputs govern how much water is absorbed at a given time and how much in-plane swelling it produces.</p>
+        </div>
+        <div>
+          <svg class="scene" viewBox="0 0 520 158" role="img" aria-labelledby="moisture-title moisture-desc">
+            <title id="moisture-title">The moisture pathway</title>
+            <desc id="moisture-desc">Moisture enters both faces of the sheet, adds absorbed water, and causes free in-plane swelling. The selected factor highlights its stage.</desc>
+            <g class="stage stage-uptake">
+              <rect class="stage-halo" x="4" y="12" width="148" height="133" rx="16"/>
+              <rect x="32" y="57" width="92" height="46" rx="5" fill="#dce9df" stroke="#91ad9b"/>
+              <path d="M32 80h92" stroke="#b3cabb" stroke-dasharray="3 4"/>
+              <circle class="water-dot" cx="52" cy="45" r="4"/>
+              <circle class="water-dot offset" cx="79" cy="45" r="4"/>
+              <circle class="water-dot late" cx="106" cy="45" r="4"/>
+              <circle class="water-dot bottom offset" cx="52" cy="116" r="4"/>
+              <circle class="water-dot bottom late" cx="79" cy="116" r="4"/>
+              <circle class="water-dot bottom" cx="106" cy="116" r="4"/>
+              <text class="stage-label" x="78" y="140" text-anchor="middle">Moisture enters</text>
+            </g>
+            <path class="arrow" d="M154 80h23m-5-5 5 5-5 5"/>
+            <g class="stage stage-concentration">
+              <rect class="stage-halo" x="184" y="12" width="148" height="133" rx="16"/>
+              <rect x="212" y="57" width="92" height="46" rx="5" fill="#dce9df" stroke="#91ad9b"/>
+              <g class="water-fill" fill="#368575">
+                <circle cx="228" cy="70" r="3"/><circle cx="248" cy="70" r="3"/><circle cx="268" cy="70" r="3"/><circle cx="288" cy="70" r="3"/>
+                <circle cx="238" cy="90" r="3"/><circle cx="258" cy="90" r="3"/><circle cx="278" cy="90" r="3"/>
+              </g>
+              <text class="stage-label" x="258" y="140" text-anchor="middle">Water absorbed</text>
+            </g>
+            <path class="arrow" d="M334 80h23m-5-5 5 5-5 5"/>
+            <g class="stage stage-swelling">
+              <rect class="stage-halo" x="364" y="12" width="148" height="133" rx="16"/>
+              <rect x="392" y="57" width="92" height="46" rx="5" fill="none" stroke="#91ad9b" stroke-dasharray="4 4"/>
+              <rect class="swelling-block" x="392" y="57" width="92" height="46" rx="5" fill="#b8d5c3" stroke="#368575"/>
+              <text class="stage-label" x="438" y="140" text-anchor="middle">Free swelling</text>
+            </g>
+          </svg>
+        </div>
+      </div>
+      <div class="factors" data-factors="moisture" role="group" aria-label="Factors affecting hygroscopic strain"></div>
+    </section>
+
+    <section id="panel-thermal" class="pathway thermal" aria-labelledby="heading-thermal">
+      <div class="scene-row">
+        <div>
+          <p class="path-label">02 · Thermal mismatch</p>
+          <h3 id="heading-thermal" class="path-heading">Two materials have different expansion.</h3>
+          <p class="path-copy">Temperature changes the free expansion of both materials. Their expansion difference creates the thermal mismatch strain.</p>
+        </div>
+        <div>
+          <svg class="scene" viewBox="0 0 520 158" role="img" aria-labelledby="thermal-title thermal-desc">
+            <title id="thermal-title">Comparing free thermal expansion</title>
+            <desc id="thermal-desc">Illustrated heating case: copper would expand more than the laminate if each could expand freely. These separate strips do not depict the deformation of bonded layers.</desc>
+            <text x="12" y="47">Copper</text><text x="12" y="101">Laminate</text>
+            <path d="M146 20v100m220-100v100" stroke="#9aada1" stroke-dasharray="4 4"/>
+            <rect x="146" y="32" width="220" height="24" rx="5" fill="none" stroke="#b9c6bc" stroke-dasharray="4 4"/>
+            <rect x="146" y="86" width="220" height="24" rx="5" fill="none" stroke="#b9c6bc" stroke-dasharray="4 4"/>
+            <rect class="thermal-bar copper" x="146" y="32" width="220" height="24" rx="5" fill="#d69b72"/>
+            <rect class="thermal-bar" x="146" y="86" width="220" height="24" rx="5" fill="#afc7b4"/>
+            <text x="146" y="143">Free expansion during heating</text>
+          </svg>
+        </div>
+      </div>
+      <div class="factors short" data-factors="thermal" role="group" aria-label="Factors affecting thermal mismatch strain"></div>
+    </section>
+
+    <section id="panel-stress" class="pathway stress" aria-labelledby="heading-stress">
+      <div class="scene-row">
+        <div>
+          <p class="path-label">03 · From strain to stress</p>
+          <h3 id="heading-stress" class="path-heading">The two pathways come together.</h3>
+          <p class="path-copy">Moisture swelling and thermal mismatch combine. Two stiffness inputs scale the resulting stress index.</p>
+        </div>
+        <div>
+          <svg class="scene" viewBox="0 0 520 158" role="img" aria-labelledby="stress-title stress-desc">
+            <title id="stress-title">From strain contributions to stress index</title>
+            <desc id="stress-desc">Hygroscopic strain and thermal mismatch strain are added, then multiplied by the biaxial modulus. For a fixed net mismatch, stiffness changes the index magnitude while preserving its sign.</desc>
+            <rect x="8" y="30" width="145" height="33" rx="7" fill="#e2eee6"/>
+            <text x="80" y="51" text-anchor="middle">Hygroscopic strain</text>
+            <rect x="8" y="83" width="145" height="33" rx="7" fill="#f4e7dd"/>
+            <text x="80" y="104" text-anchor="middle">Thermal mismatch</text>
+            <path class="arrow" d="M162 47h16v26h22m-38 26h16V73m17-5 5 5-5 5"/>
+            <rect x="207" y="42" width="126" height="63" rx="10" fill="#eceee1" stroke="#c3c7ae"/>
+            <text class="stage-label" x="270" y="79" text-anchor="middle">Biaxial modulus</text>
+            <path class="arrow" d="M341 73h27m-5-5 5 5-5 5"/>
+            <rect x="379" y="59" width="110" height="27" rx="5" fill="#e5e7d7"/>
+            <rect class="stress-bar" x="379" y="59" width="95" height="27" rx="5" fill="#8c9270"/>
+            <text class="stage-label" x="434" y="116" text-anchor="middle">Stress index</text>
+          </svg>
+        </div>
+      </div>
+      <div class="factors short" data-factors="stress" role="group" aria-label="Factors affecting stress conversion"></div>
+    </section>
+  </section>
+  <script>
+    (() => {
+      const guide = document.querySelector('.guide');
+      const factors = {
+        moisture: [
+          { key: 'D', name: 'Moisture diffusivity', role: 'Controls uptake rate', stage: 'uptake',
+            detail: 'Faster diffusion brings moisture into the laminate sooner.' },
+          { key: 't_hours', name: 'Exposure time', role: 'Allows diffusion to progress', stage: 'uptake',
+            detail: 'Longer exposure allows more moisture uptake and swelling, until saturation.' },
+          { key: 'h_mm', name: 'Laminate thickness', role: 'Sets the diffusion distance', stage: 'uptake',
+            detail: 'Thicker laminates take longer to approach moisture equilibrium.' },
+          { key: 'Csat', name: 'Saturation concentration', role: 'Sets moisture capacity', stage: 'concentration',
+            detail: 'Higher capacity means more absorbed water at the same fractional uptake.' },
+          { key: 'beta', name: 'Hygroscopic expansion coefficient', role: 'Converts water into swelling', stage: 'swelling',
+            detail: 'A higher coefficient produces more swelling from the same water content.' },
+        ],
+        thermal: [
+          { key: 'alpha_lam', name: 'Laminate thermal expansion coefficient', role: 'Sets expansion per degree',
+            detail: 'Its difference from copper’s expansion coefficient sets the thermal mismatch.' },
+          { key: 'delta_T', name: 'Temperature change', role: 'Sets the thermal excursion',
+            detail: 'Larger heating or cooling excursions increase mismatch when the expansion coefficients differ.' },
+        ],
+        stress: [
+          { key: 'E', name: 'Young’s modulus', role: 'Sets elastic stiffness',
+            detail: 'Higher stiffness increases the stress-index magnitude for the same net strain.' },
+          { key: 'nu', name: 'Poisson’s ratio', role: 'Sets the biaxial coupling',
+            detail: 'Controls the coupling between the two in-plane directions, changing the stiffness used to convert strain into the stress index.' },
+        ],
+      };
+      function highlightFactor(path, index) {
+        const panel = document.getElementById(`panel-${path}`);
+        const factor = factors[path][index];
+        panel.querySelectorAll('.factor').forEach((card, i) => { card.dataset.highlighted = String(i === index); });
+        if (factor.stage) guide.dataset.stage = factor.stage;
+      }
+      Object.entries(factors).forEach(([path, items]) => {
+        const container = document.querySelector(`[data-factors="${path}"]`);
+        items.forEach((factor, index) => {
+          const card = document.createElement('article');
+          card.className = 'factor';
+          card.dataset.parameter = factor.key;
+          card.tabIndex = 0;
+          card.setAttribute('aria-labelledby', `factor-${factor.key}`);
+          const name = document.createElement('span');
+          name.className = 'factor-name';
+          name.id = `factor-${factor.key}`;
+          name.textContent = factor.name;
+          const role = document.createElement('span');
+          role.className = 'factor-role';
+          role.textContent = factor.role;
+          const description = document.createElement('p');
+          description.className = 'factor-description';
+          description.textContent = factor.detail;
+          card.append(name, role, description);
+          card.addEventListener('pointerenter', () => highlightFactor(path, index));
+          card.addEventListener('focus', () => highlightFactor(path, index));
+          container.append(card);
+        });
+        if (path === 'moisture') highlightFactor(path, 0);
+      });
+      const motionControl = document.querySelector('.motion-control');
+      motionControl.addEventListener('click', () => {
+        const paused = guide.classList.toggle('paused');
+        motionControl.setAttribute('aria-pressed', String(paused));
+        motionControl.textContent = paused ? 'Play animation' : 'Pause animation';
+      });
+    })();
+  </script>
+</body>
+</html>

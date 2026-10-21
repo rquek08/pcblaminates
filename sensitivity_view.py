@@ -1,6 +1,7 @@
-"""Sensitivity section controls and plots; rendered only in tab 2."""
+"""Sobol sensitivity controls and plots; rendered only in tab 2."""
 import hashlib
 import json
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -11,13 +12,20 @@ from sensitivity_analysis import (
     EXPOSURE, FIXED_META, MATERIAL, OUTPUTS, PARAMETERS, STUDIES,
     default_ranges, excel_report, material_ranges, run_analysis,
 )
+from typography import document_fonts
 
 
 @st.cache_data(show_spinner=False, max_entries=6)
 def calculate(config):
     return run_analysis(config["baseline"], config["ranges"], config["diffusion"],
-                        config["target"], config["N"], config["seed"],
-                        config["method"], config["trajectories"])
+                        target=config["target"], N=config["N"], seed=config["seed"],
+                        method="Sobol")
+
+
+def render_parameter_overview():
+    """Explain the nine varied inputs in an isolated, animated guide."""
+    overview = (Path(__file__).parent / "assets" / "sensitivity_overview.html").read_text(encoding="utf-8")
+    st.iframe(document_fonts(overview), height="content")
 
 
 def render_nominal_inputs(name, values):
@@ -52,6 +60,7 @@ def render_sensitivity(records):
         )
         st.title("Sensitivity Analysis")
     st.caption("Choose materials and study how exposure conditions or property variations affect moisture uptake, swelling and stress.")
+    render_parameter_overview()
     presets = {r["name"]: r for r in records}
     custom = "Custom material / manual entry"
     custom_values = dict(E=25000., nu=.2, alpha_lam=12., alpha_cu=16.5,
@@ -71,12 +80,10 @@ def render_sensitivity(records):
             st.info("Choose at least one material.")
             return
         study = st.radio("Study", STUDIES, index=1, horizontal=True, key="sens_study", persist_state="session")
-        method_col, output_col = st.columns(2)
-        method = method_col.selectbox("Analysis method", ["Sobol", "Morris"], key="sens_method", persist_state="session")
-        target = output_col.selectbox("Response to analyse", list(OUTPUTS),
-                                      format_func=lambda key: f"{OUTPUTS[key][0]} ({OUTPUTS[key][1]})",
-                                      key="sens_output", persist_state="session")
-        st.caption("Sobol estimates contributions to response variance. Morris screens influence using one-at-a-time trajectories.")
+        target = st.selectbox("Response to analyse", list(OUTPUTS),
+                              format_func=lambda key: f"{OUTPUTS[key][0]} ({OUTPUTS[key][1]})",
+                              key="sens_output", persist_state="session")
+        st.caption("Sobol analysis estimates how much each input and its interactions contribute to response variance.")
         range_mode = st.radio("Parameter ranges", ["Around each material", "Broad exploratory ranges"],
                               horizontal=True, key="sens_range_basis", persist_state="session")
         percent, factor = 10.0, 2.0
@@ -162,17 +169,10 @@ def render_sensitivity(records):
                         }, key=editor_key,
                     )
             size, scramble = st.columns(2)
-            N, trajectories = 4096, 40
-            if method == "Sobol":
-                N = size.select_slider("Base sample size N", options=[512, 1024, 2048, 4096, 8192],
-                                       value=4096, key="sens_N", persist_state="session")
-                cost = N * (len(keys) + 2)
-                note = "500 bootstrap resamples per material · 95% intervals"
-            else:
-                trajectories = size.select_slider("Morris trajectories", options=[20, 40, 80, 160],
-                                                  value=40, key="sens_trajectories", persist_state="session")
-                cost = trajectories * (len(keys) + 1)
-                note = "Six grid levels · normalized step 0.6"
+            N = size.select_slider("Base sample size N", options=[512, 1024, 2048, 4096, 8192],
+                                   value=4096, key="sens_N", persist_state="session")
+            cost = N * (len(keys) + 2)
+            note = "500 bootstrap resamples per material · 95% intervals"
             seed = scramble.number_input("Sampling seed", min_value=0, max_value=1000000,
                                           value=12345, step=1, key="sens_seed", persist_state="session")
             st.caption(f"{cost * len(names):,} model evaluations across {len(names)} material(s) · {note}")
@@ -181,14 +181,14 @@ def render_sensitivity(records):
     configs = [dict(study=study, material=name, condition=presets[name]["condition"] if name != custom else "Manual inputs",
                     baseline_source="Material preset" if name != custom else "Manual inputs",
                     baseline=baselines[name], range_basis=range_mode, ranges=ranges[name].to_dict("records"),
-                    diffusion=diffusion, target=target, method=method, N=int(N), trajectories=int(trajectories),
-                    seed=int(seed), bootstrap_resamples=500 if method == "Sobol" else 0) for name in names]
+                    diffusion=diffusion, target=target, method="Sobol", N=int(N),
+                    seed=int(seed), bootstrap_resamples=500) for name in names]
     signature = json.dumps(configs, sort_keys=True)
     if submitted:
         for name in names:
             saved_ranges[editors[name]] = ranges[name].copy()
         runs = []
-        with st.spinner(f"Calculating {method} sensitivity for {len(names)} material(s)…"):
+        with st.spinner(f"Calculating Sobol sensitivity for {len(names)} material(s)…"):
             for config in configs:
                 try:
                     runs.append(dict(config=config, result=calculate(config)))
@@ -223,29 +223,26 @@ def render_sensitivity(records):
     active_signature = signature + config["material"]
     st.session_state["sensitivity_current_signature"] = active_signature
     st.session_state["sensitivity_result"] = dict(signature=active_signature, **active)
-    st.caption(f"Results for {config['material']} · {method} · {OUTPUTS[target][0]}")
+    st.caption(f"Results for {config['material']} · Sobol · {OUTPUTS[target][0]}")
     render_results(active["result"], config, active_signature)
 
 
 def render_comparison(runs, configs):
     st.subheader("Material Comparison")
-    morris = runs[0]["config"]["method"] == "Morris"
-    score = "mu_star" if morris else "ST"
     table = pd.concat([run["result"]["indices"].assign(Material=run["config"]["material"],
                                                      Condition=run["config"]["condition"]) for run in runs], ignore_index=True)
     fig = go.Figure()
     colors = ["#368575", "#c87d55", "#7f8165", "#92b8ad"]
     for run, color in zip(runs, colors):
         data = run["result"]["indices"]
-        fig.add_trace(go.Bar(x=data["Label"], y=data[score], name=run["config"]["material"], marker_color=color))
+        fig.add_trace(go.Bar(x=data["Label"], y=data["ST"], name=run["config"]["material"], marker_color=color))
     fig.update_layout(barmode="group", height=400, margin=dict(t=20, b=20),
-                      yaxis_title=(f"Morris μ* ({OUTPUTS[runs[0]['config']['target']][1]})" if morris else "Total effect · ST"),
+                      yaxis_title="Total effect · ST",
                       legend=dict(orientation="h", y=-.35))
     st.plotly_chart(fig, width="stretch", key="sens_comparison_chart")
     st.caption("Each material is analysed separately with the same sampling seed and response. "
                "Its own nominal inputs and displayed bounds determine the ranking. "
-               + ("Morris effects use response units; compare only the same response." if morris else
-                  "ST describes a share of each material's own response variance, not its absolute stress level."))
+               "ST describes a share of each material's own response variance, not its absolute stress level.")
     with st.expander("Comparison table and downloads"):
         st.dataframe(table.drop(columns="Parameter"), hide_index=True, width="stretch")
         st.download_button("All material rankings (CSV)", table.to_csv(index=False).encode(),
@@ -261,9 +258,6 @@ def render_results(result, config, signature):
                                        "Calculated from temperature" if key == "D" and config["diffusion"]["mode"] == "Arrhenius" else "Fixed")
                                    for key, (label, unit) in FIXED_META.items()]), hide_index=True, width="stretch")
         st.dataframe(pd.DataFrame(config["ranges"]).drop(columns="Parameter"), hide_index=True, width="stretch")
-    if config["method"] == "Morris":
-        render_morris_results(result, config, signature)
-        return
     table = result["indices"].sort_values("ST", ascending=False)
     unit = OUTPUTS[config["target"]][1]
     st.subheader("Parameter Importance")
@@ -321,52 +315,13 @@ def render_results(result, config, signature):
     render_downloads(result, config, signature)
 
 
-def render_morris_results(result, config, signature):
-    table = result["indices"].sort_values("mu_star", ascending=False)
-    unit = OUTPUTS[config["target"]][1]
-    st.subheader("Parameter Importance · Morris")
-    influence, variation = st.columns(2, border=True)
-    influence.markdown(r"**μ\* · Overall influence**")
-    influence.write("Mean absolute elementary effect across trajectories. Larger values indicate more influence over these ranges.")
-    variation.markdown("**σ · Variation in effect**")
-    variation.write("Variation among signed effects can indicate nonlinearity and/or interactions. It is not a confidence interval.")
-    fig = go.Figure()
-    for key, label, color in [("mu_star", "Overall influence · μ*", "#368575"),
-                               ("sigma", "Variation in effect · σ", "#c87d55")]:
-        fig.add_trace(go.Bar(y=table["Label"], x=table[key], orientation="h", name=label, marker_color=color))
-    fig.update_layout(barmode="group", height=max(340, 65 * len(table)),
-                      xaxis_title=f"Morris effect ({unit})", yaxis=dict(autorange="reversed"),
-                      margin=dict(t=25, b=30, l=15, r=25), legend=dict(orientation="h", y=1.12))
-    st.plotly_chart(fig, width="stretch", key="sens_morris_chart")
-    top = table.iloc[0]
-    if np.allclose(table["mu_star"], 0, rtol=0, atol=1e-15):
-        st.info("The selected response is constant across these trajectories; no influence ranking can be established.")
-    else:
-        st.info(f"Largest screening influence: **{top['Label']}** (μ* ≈ {top['mu_star']:.3g} {unit}) for these bounds.")
-    st.caption("Effects use normalized input steps and have the response's units. They are not percentages "
-               "or variance shares; compare effects only for the same response and stated ranges.")
-    with st.expander("Further information"):
-        st.dataframe(table.drop(columns="Parameter"), hide_index=True, width="stretch")
-        st.dataframe(result["summary"], hide_index=True, width="stretch")
-        st.caption("Summary statistics describe the sampled Morris trajectories, not independent probability draws or measured uncertainty.")
-        st.dataframe(result["samples"].head(500), hide_index=True, width="stretch")
-        st.write(f"{config['trajectories']} randomized one-at-a-time trajectories on a six-level grid "
-                 "with step 0.6 in normalized input space. Log-uniform inputs are stepped in log space. "
-                 "μ is the signed mean effect; μ* is the mean absolute effect; σ is the sample standard deviation.")
-        st.write("Uptake starts dry with both sheet faces exposed. The constrained stress index "
-                 "is an indicator; it does not predict interface traction or delamination failure.")
-    render_downloads(result, config, signature)
-
-
 def render_downloads(result, config, signature):
-    method = config["method"]
-    score = "mu_star" if method == "Morris" else "ST"
-    table = result["indices"].sort_values(score, ascending=False)
+    table = result["indices"].sort_values("ST", ascending=False)
     with st.expander("Download the study", expanded=False):
         indices, samples, settings = st.columns(3)
-        indices.download_button(f"{method} rankings (CSV)", table.to_csv(index=False).encode(), f"{method.lower()}_indices.csv", "text/csv", key="sens_indices_download")
-        samples.download_button("All samples (CSV)", result["samples"].to_csv(index=False).encode(), f"{method.lower()}_samples.csv", "text/csv", key="sens_samples_download")
-        settings.download_button("Study settings (JSON)", json.dumps(config, indent=2).encode(), f"{method.lower()}_settings.json", "application/json", key="sens_settings_download")
+        indices.download_button("Sobol rankings (CSV)", table.to_csv(index=False).encode(), "sobol_indices.csv", "text/csv", key="sens_indices_download")
+        samples.download_button("All samples (CSV)", result["samples"].to_csv(index=False).encode(), "sobol_samples.csv", "text/csv", key="sens_samples_download")
+        settings.download_button("Study settings (JSON)", json.dumps(config, indent=2).encode(), "sobol_settings.json", "application/json", key="sens_settings_download")
         if st.button("Prepare Excel workbook", key="sens_prepare_excel"):
             try:
                 with st.spinner("Preparing workbook with settings, samples, and results…"):
