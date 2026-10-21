@@ -1,3 +1,14 @@
+"""Hygrothermal mismatch stress explorer.
+
+Read this file from the top to review the calculation:
+  1. Numerical stress pipeline: water molar mass, diffusion, strain, stress index.
+  2. Material presets: inputs supplied to the calculation.
+  3. User interface: module loading, equation labels, charts, styling, navigation.
+
+The numerical functions use metres, seconds, MPa, and CTE values in ppm/K.
+The UI converts entered thickness (mm) and soak time (hours) before calling them.
+"""
+
 import streamlit as st
 import json
 import re
@@ -7,6 +18,114 @@ import numpy as np
 import plotly.graph_objects as go
 from pathlib import Path
 
+
+# -----------------------------------------------------------------------------
+# 1. STRESS CALCULATION PIPELINE
+# -----------------------------------------------------------------------------
+MOLAR_MASS_WATER = 0.018015  # kg/mol
+
+
+def compute_fickian_uptake(D, h, t, n_terms=50):
+    """Return the dimensionless average moisture ratio Mt/M∞.
+
+    Inputs: D in m²/s, h as the FULL sheet thickness in m, and t in seconds
+    (a scalar or an array). Assumes an initially dry homogeneous sheet, constant
+    D, and constant moisture concentration at both exposed faces.
+
+    Uses 4*sqrt(Fo/pi) for 0 < Fo < 0.005 and the odd-term sheet series
+    otherwise, where Fo = D*t/h². The returned ratio is clipped to [0, 1].
+    """
+    times = np.asarray(t, dtype=float)
+    Fo = D * np.maximum(times, 0.0) / h**2
+    uptake = np.zeros_like(Fo)
+    # The short-time limit avoids a truncated-series offset near t=0 or D=0.
+    early = (Fo > 0) & (Fo < 0.005)
+    uptake[early] = 4 * np.sqrt(Fo[early] / np.pi)
+    later = Fo >= 0.005
+    odd = 2 * np.arange(n_terms) + 1
+    terms = np.exp(-np.pi**2 * Fo[later, None] * odd**2) / odd**2
+    uptake[later] = 1.0 - (8.0 / np.pi**2) * terms.sum(axis=1)
+    uptake = np.clip(uptake, 0.0, 1.0)
+    return float(uptake) if times.ndim == 0 else uptake
+
+
+def run_analytical_stress_pipeline(D, Csat, h, t, beta, alpha_lam, alpha_cu, delta_T, E, nu):
+    """Compute uptake → average moisture → swelling → mismatch → stress index.
+
+    Input units:
+        D: m²/s; Csat: mol/m³; h: full laminate thickness in m; t: seconds.
+        beta: linear in-plane swelling per water concentration, m³/kg.
+        alpha_lam, alpha_cu: ppm/K; delta_T: K or °C difference.
+        E: MPa; nu: dimensionless.
+
+    Output units:
+        Mt_Minf and eps_*: dimensionless; C_t: mol/m³; W_t: kg/m³.
+        biaxial_modulus and sigma_*: MPa.
+
+    This preserves the existing signed mismatch index and its convention.
+    It does not solve layer load sharing, interface shear/peel, or curvature.
+    """
+    # 1. Fractional uptake: Mt/M∞ = F(D*t/h²).
+    mt_minf = compute_fickian_uptake(D, h, t)
+
+    # 2. Average moisture: C_t = F*Csat; W_t = C_t*M_water [kg/m³].
+    c_t = mt_minf * Csat
+    w_t = c_t * MOLAR_MASS_WATER
+
+    # 3. Free hygroscopic strain: eps_h = beta*W_t [dimensionless].
+    eps_h = beta * w_t
+
+    # 4. Free thermal mismatch: eps_t = (alpha_lam-alpha_cu)*1e-6*delta_T.
+    eps_t = (alpha_lam - alpha_cu) * 1e-6 * delta_T
+
+    # 5. Signed mismatch index: sigma = E/(1-nu)*(eps_h+eps_t) [MPa].
+    biaxial_modulus = E / (1.0 - nu)
+    sigma_hygro = biaxial_modulus * eps_h
+    sigma_thermal = biaxial_modulus * eps_t
+    sigma_index = biaxial_modulus * (eps_h + eps_t)
+
+    return {
+        "Mt_Minf": mt_minf,
+        "C_t": c_t,
+        "W_t": w_t,
+        "eps_h": eps_h,
+        "eps_t": eps_t,
+        "eps_net": eps_h + eps_t,
+        "biaxial_modulus": biaxial_modulus,
+        "sigma_hygro": sigma_hygro,
+        "sigma_thermal": sigma_thermal,
+        "sigma_index": sigma_index
+    }
+
+
+# -----------------------------------------------------------------------------
+# 2. MATERIAL PRESETS AND INPUT DATA
+# -----------------------------------------------------------------------------
+# Condition-specific laminate inputs extracted from Formula_sheet_V2.xlsx.
+# Store the inputs locally so running the app does not require the source workbook.
+MATERIAL_LIBRARY = json.loads(
+    (Path(__file__).parent / "material_presets.json").read_text(encoding="utf-8")
+)
+PRESET_METADATA = {record["name"]: record for record in MATERIAL_LIBRARY["presets"]}
+PRESETS = {name: record["properties"] for name, record in PRESET_METADATA.items()}
+PRESETS.update({
+    # Custom entry option
+    "Custom / Manual Entry": {
+        "E": 25000.0, "nu": 0.200, "alpha_lam": 12.0,
+        "D": 1.00e-12, "Csat": 150.00, "beta": 1.00e-4, "h_mm": 1.6
+    }
+})
+LEGACY_PRESET_NAMES = {
+    "Isola 370HR (High-Tg Core)": "Isola 370HR — 85°C/85%RH",
+    "Isola G200 (BT-Epoxy System)": "Isola G200 — 85°C/85%RH",
+    "Isola IS410 (Lead-Free FR-4)": "Isola IS410 — 85°C/85%RH",
+    "Shengyi SI10US (Halogen-Free CCL)": "Shengyi SI10US/SI13U — 85°C/85%RH",
+}
+
+
+# -----------------------------------------------------------------------------
+# 3. USER INTERFACE: EXPLORATION MODULES
+# -----------------------------------------------------------------------------
 # Load the exploration modules from this app's folder, including when older
 # copies from the parent folder are already in Python's module cache.
 for module_name, filename in (("typography", "typography.py"),
@@ -25,11 +144,10 @@ render_inverse = sys.modules["_pcb_inverse_view"].render_inverse
 render_stack = sys.modules["_pcb_stack_view"].render_stack
 typography = sys.modules["typography"]
 
-# -----------------------------------------------------------------------------
-# Configuration & Constants
-# -----------------------------------------------------------------------------
-MOLAR_MASS_WATER = 0.018015  # kg/mol
 
+# -----------------------------------------------------------------------------
+# 4. USER INTERFACE: EQUATION LABELS
+# -----------------------------------------------------------------------------
 # LaTeX, rendered symbol, meaning and units shared by all home-page equations.
 EQUATION_SYMBOLS = {
     "D": ("D", "D", "Moisture diffusivity", "m²/s"),
@@ -58,46 +176,10 @@ EQUATION_SYMBOLS = {
     "sigma_index": (r"\sigma_{\mathrm{index}}", "σindex", "Combined stress index", "MPa"),
 }
 
-# Condition-specific laminate inputs extracted from Formula_sheet_V2.xlsx.
-# Store the inputs locally so running the app does not require the source workbook.
-MATERIAL_LIBRARY = json.loads(
-    (Path(__file__).parent / "material_presets.json").read_text(encoding="utf-8")
-)
-PRESET_METADATA = {record["name"]: record for record in MATERIAL_LIBRARY["presets"]}
-PRESETS = {name: record["properties"] for name, record in PRESET_METADATA.items()}
-PRESETS.update({
-    # Custom entry option
-    "Custom / Manual Entry": {
-        "E": 25000.0, "nu": 0.200, "alpha_lam": 12.0,
-        "D": 1.00e-12, "Csat": 150.00, "beta": 1.00e-4, "h_mm": 1.6
-    }
-})
-LEGACY_PRESET_NAMES = {
-    "Isola 370HR (High-Tg Core)": "Isola 370HR — 85°C/85%RH",
-    "Isola G200 (BT-Epoxy System)": "Isola G200 — 85°C/85%RH",
-    "Isola IS410 (Lead-Free FR-4)": "Isola IS410 — 85°C/85%RH",
-    "Shengyi SI10US (Halogen-Free CCL)": "Shengyi SI10US/SI13U — 85°C/85%RH",
-}
 
 # -----------------------------------------------------------------------------
-# Physics Pipeline Functions
+# 5. USER INTERFACE: CHARTS AND RESULT EXPLANATIONS
 # -----------------------------------------------------------------------------
-def compute_fickian_uptake(D, h, t, n_terms=50):
-    """Two-face plane-sheet uptake for a time in seconds or an array of times."""
-    times = np.asarray(t, dtype=float)
-    Fo = D * np.maximum(times, 0.0) / h**2
-    uptake = np.zeros_like(Fo)
-    # The short-time limit avoids a truncated-series offset near t=0 or D=0.
-    early = (Fo > 0) & (Fo < 0.005)
-    uptake[early] = 4 * np.sqrt(Fo[early] / np.pi)
-    later = Fo >= 0.005
-    odd = 2 * np.arange(n_terms) + 1
-    terms = np.exp(-np.pi**2 * Fo[later, None] * odd**2) / odd**2
-    uptake[later] = 1.0 - (8.0 / np.pi**2) * terms.sum(axis=1)
-    uptake = np.clip(uptake, 0.0, 1.0)
-    return float(uptake) if times.ndim == 0 else uptake
-
-
 def render_moisture_uptake(D, h, t_hours, current_uptake):
     st.subheader("Moisture Uptake Over Time")
     window_days = st.radio("Time window (days)", [30, 120, 365], horizontal=True,
@@ -135,39 +217,6 @@ def render_moisture_uptake(D, h, t_hours, current_uptake):
     if end_days > window_days:
         st.caption("The time window has been extended to include the selected soak time.")
 
-def run_analytical_stress_pipeline(D, Csat, h, t, beta, alpha_lam, alpha_cu, delta_T, E, nu):
-    """Executes the 5-equation hygro-thermo-mechanical analytical pipeline."""
-    # 1. Crank's moisture ratio
-    mt_minf = compute_fickian_uptake(D, h, t)
-    
-    # 2. Moisture mass uptake (kg/m^3)
-    c_t = mt_minf * Csat
-    w_t = c_t * MOLAR_MASS_WATER
-    
-    # 3. Hygroscopic strain
-    eps_h = beta * w_t
-    
-    # 4. Thermal mismatch strain (in-plane plane-stress constraint)
-    eps_t = (alpha_lam - alpha_cu) * 1e-6 * delta_T
-    
-    # 5. Combined interfacial stress index
-    biaxial_modulus = E / (1.0 - nu)
-    sigma_hygro = biaxial_modulus * eps_h
-    sigma_thermal = biaxial_modulus * eps_t
-    sigma_index = biaxial_modulus * (eps_h + eps_t)
-    
-    return {
-        "Mt_Minf": mt_minf,
-        "C_t": c_t,
-        "W_t": w_t,
-        "eps_h": eps_h,
-        "eps_t": eps_t,
-        "eps_net": eps_h + eps_t,
-        "biaxial_modulus": biaxial_modulus,
-        "sigma_hygro": sigma_hygro,
-        "sigma_thermal": sigma_thermal,
-        "sigma_index": sigma_index
-    }
 
 def interpret_stress_contributions(hygroscopic, thermal):
     """Describe signed contributions using their magnitudes to determine dominance."""
@@ -297,6 +346,10 @@ def render_3d_deformation(eps_h, eps_t, eps_net, n_frames=20):
     )
     return fig
 
+
+# -----------------------------------------------------------------------------
+# 6. USER INTERFACE: NAVIGATION, STYLING, AND PAGE LAYOUTS
+# -----------------------------------------------------------------------------
 NAVIGATION = ["Stress Analyser", "Sensitivity Analysis", "Inverse Exploration"]
 
 
