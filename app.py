@@ -1,6 +1,6 @@
 """Hygrothermal mismatch stress explorer.
 
-Read this file from the top to review the calculation:
+Includes:
   1. Numerical stress pipeline: water molar mass, diffusion, strain, stress index.
   2. Material presets: inputs supplied to the calculation.
   3. User interface: module loading, equation labels, charts, styling, navigation.
@@ -25,76 +25,131 @@ from pathlib import Path
 MOLAR_MASS_WATER = 0.018015  # kg/mol
 
 
-def compute_fickian_uptake(D, h, t, n_terms=50):
-    """Return the dimensionless average moisture ratio Mt/M∞.
+def compute_fickian_uptake(
+    moisture_diffusivity,
+    laminate_thickness_meters,
+    exposure_time_seconds,
+    number_of_series_terms=50,
+):
+    """Return the fraction of equilibrium moisture capacity absorbed, from 0 to 1.
 
-    Inputs: D in m²/s, h as the FULL sheet thickness in m, and t in seconds
-    (a scalar or an array). Assumes an initially dry homogeneous sheet, constant
-    D, and constant moisture concentration at both exposed faces.
+    Inputs:
+        moisture_diffusivity: moisture diffusion coefficient, in m²/s.
+        laminate_thickness_meters: FULL sheet thickness, in m.
+        exposure_time_seconds: a single exposure time or an array, in seconds.
+        number_of_series_terms: number of terms in the diffusion series.
 
-    Uses 4*sqrt(Fo/pi) for 0 < Fo < 0.005 and the odd-term sheet series
-    otherwise, where Fo = D*t/h². The returned ratio is clipped to [0, 1].
+    Assumes an initially dry homogeneous sheet, constant diffusivity, and
+    constant moisture concentration at both exposed faces.
+
+    The diffusion Fourier number is diffusivity multiplied by exposure time,
+    divided by full thickness squared. For values below 0.005, use the
+    short-time approximation; otherwise use the odd-term sheet series.
     """
-    times = np.asarray(t, dtype=float)
-    Fo = D * np.maximum(times, 0.0) / h**2
-    uptake = np.zeros_like(Fo)
-    # The short-time limit avoids a truncated-series offset near t=0 or D=0.
-    early = (Fo > 0) & (Fo < 0.005)
-    uptake[early] = 4 * np.sqrt(Fo[early] / np.pi)
-    later = Fo >= 0.005
-    odd = 2 * np.arange(n_terms) + 1
-    terms = np.exp(-np.pi**2 * Fo[later, None] * odd**2) / odd**2
-    uptake[later] = 1.0 - (8.0 / np.pi**2) * terms.sum(axis=1)
-    uptake = np.clip(uptake, 0.0, 1.0)
-    return float(uptake) if times.ndim == 0 else uptake
+    exposure_times_seconds = np.asarray(exposure_time_seconds, dtype=float)
+    diffusion_fourier_number = (
+        moisture_diffusivity
+        * np.maximum(exposure_times_seconds, 0.0)
+        / laminate_thickness_meters**2
+    )
+    moisture_uptake_fraction = np.zeros_like(diffusion_fourier_number)
+    # Avoid a truncated-series offset near zero exposure time or diffusivity.
+    short_time_mask = (diffusion_fourier_number > 0) & (diffusion_fourier_number < 0.005)
+    moisture_uptake_fraction[short_time_mask] = 4 * np.sqrt(
+        diffusion_fourier_number[short_time_mask] / np.pi
+    )
+    series_solution_mask = diffusion_fourier_number >= 0.005
+    odd_mode_numbers = 2 * np.arange(number_of_series_terms) + 1
+    diffusion_series_terms = np.exp(
+        -np.pi**2
+        * diffusion_fourier_number[series_solution_mask, None]
+        * odd_mode_numbers**2
+    ) / odd_mode_numbers**2
+    moisture_uptake_fraction[series_solution_mask] = (
+        1.0 - (8.0 / np.pi**2) * diffusion_series_terms.sum(axis=1)
+    )
+    moisture_uptake_fraction = np.clip(moisture_uptake_fraction, 0.0, 1.0)
+    return (
+        float(moisture_uptake_fraction)
+        if exposure_times_seconds.ndim == 0
+        else moisture_uptake_fraction
+    )
 
 
-def run_analytical_stress_pipeline(D, Csat, h, t, beta, alpha_lam, alpha_cu, delta_T, E, nu):
+def run_analytical_stress_pipeline(
+    moisture_diffusivity,
+    saturation_moisture_concentration,
+    laminate_thickness_meters,
+    exposure_time_seconds,
+    hygroscopic_expansion_coefficient,
+    laminate_thermal_expansion_coefficient,
+    copper_thermal_expansion_coefficient,
+    temperature_change,
+    youngs_modulus,
+    poisson_ratio,
+):
     """Compute uptake → average moisture → swelling → mismatch → stress index.
 
     Input units:
-        D: m²/s; Csat: mol/m³; h: full laminate thickness in m; t: seconds.
-        beta: linear in-plane swelling per water concentration, m³/kg.
-        alpha_lam, alpha_cu: ppm/K; delta_T: K or °C difference.
-        E: MPa; nu: dimensionless.
+        moisture_diffusivity: m²/s.
+        saturation_moisture_concentration: mol/m³.
+        laminate_thickness_meters: full laminate thickness, in m.
+        exposure_time_seconds: seconds.
+        hygroscopic_expansion_coefficient: linear in-plane swelling per water
+            mass concentration, in m³/kg.
+        laminate_thermal_expansion_coefficient: ppm/K.
+        copper_thermal_expansion_coefficient: ppm/K.
+        temperature_change: K or °C difference.
+        youngs_modulus: MPa.
+        poisson_ratio: dimensionless.
 
     Output units:
-        Mt_Minf and eps_*: dimensionless; C_t: mol/m³; W_t: kg/m³.
-        biaxial_modulus and sigma_*: MPa.
+        Moisture uptake fraction and strains: dimensionless.
+        Average moisture concentration: mol/m³.
+        Absorbed water mass concentration: kg/m³.
+        Biaxial modulus and stress indices: MPa.
 
     This preserves the existing signed mismatch index and its convention.
     It does not solve layer load sharing, interface shear/peel, or curvature.
     """
-    # 1. Fractional uptake: Mt/M∞ = F(D*t/h²).
-    mt_minf = compute_fickian_uptake(D, h, t)
+    # 1. Determine the fraction of equilibrium moisture capacity absorbed.
+    moisture_uptake_fraction = compute_fickian_uptake(
+        moisture_diffusivity, laminate_thickness_meters, exposure_time_seconds
+    )
 
-    # 2. Average moisture: C_t = F*Csat; W_t = C_t*M_water [kg/m³].
-    c_t = mt_minf * Csat
-    w_t = c_t * MOLAR_MASS_WATER
+    # 2. Scale the saturation concentration and convert mol/m³ to kg/m³.
+    average_moisture_concentration = moisture_uptake_fraction * saturation_moisture_concentration
+    absorbed_water_mass_concentration = average_moisture_concentration * MOLAR_MASS_WATER
 
-    # 3. Free hygroscopic strain: eps_h = beta*W_t [dimensionless].
-    eps_h = beta * w_t
+    # 3. Multiply absorbed water concentration by the expansion coefficient.
+    hygroscopic_strain = hygroscopic_expansion_coefficient * absorbed_water_mass_concentration
 
-    # 4. Free thermal mismatch: eps_t = (alpha_lam-alpha_cu)*1e-6*delta_T.
-    eps_t = (alpha_lam - alpha_cu) * 1e-6 * delta_T
+    # 4. Multiply the thermal expansion difference by the temperature change.
+    #    The factor 1e-6 converts coefficients from ppm/K to 1/K.
+    thermal_mismatch_strain = (
+        (laminate_thermal_expansion_coefficient - copper_thermal_expansion_coefficient)
+        * 1e-6
+        * temperature_change
+    )
 
-    # 5. Signed mismatch index: sigma = E/(1-nu)*(eps_h+eps_t) [MPa].
-    biaxial_modulus = E / (1.0 - nu)
-    sigma_hygro = biaxial_modulus * eps_h
-    sigma_thermal = biaxial_modulus * eps_t
-    sigma_index = biaxial_modulus * (eps_h + eps_t)
+    # 5. Multiply each strain contribution by the biaxial modulus, in MPa.
+    biaxial_modulus = youngs_modulus / (1.0 - poisson_ratio)
+    hygroscopic_stress_index = biaxial_modulus * hygroscopic_strain
+    thermal_stress_index = biaxial_modulus * thermal_mismatch_strain
+    combined_stress_index = biaxial_modulus * (hygroscopic_strain + thermal_mismatch_strain)
 
+    # Preserve the existing result keys used by the app's charts and saved state.
     return {
-        "Mt_Minf": mt_minf,
-        "C_t": c_t,
-        "W_t": w_t,
-        "eps_h": eps_h,
-        "eps_t": eps_t,
-        "eps_net": eps_h + eps_t,
+        "Mt_Minf": moisture_uptake_fraction,
+        "C_t": average_moisture_concentration,
+        "W_t": absorbed_water_mass_concentration,
+        "eps_h": hygroscopic_strain,
+        "eps_t": thermal_mismatch_strain,
+        "eps_net": hygroscopic_strain + thermal_mismatch_strain,
         "biaxial_modulus": biaxial_modulus,
-        "sigma_hygro": sigma_hygro,
-        "sigma_thermal": sigma_thermal,
-        "sigma_index": sigma_index
+        "sigma_hygro": hygroscopic_stress_index,
+        "sigma_thermal": thermal_stress_index,
+        "sigma_index": combined_stress_index
     }
 
 
@@ -180,17 +235,24 @@ EQUATION_SYMBOLS = {
 # -----------------------------------------------------------------------------
 # 5. USER INTERFACE: CHARTS AND RESULT EXPLANATIONS
 # -----------------------------------------------------------------------------
-def render_moisture_uptake(D, h, t_hours, current_uptake):
+def render_moisture_uptake(
+    moisture_diffusivity,
+    laminate_thickness_meters,
+    exposure_time_hours,
+    current_moisture_uptake_fraction,
+):
     st.subheader("Moisture Uptake Over Time")
     window_days = st.radio("Time window (days)", [30, 120, 365], horizontal=True,
                            key="uptake_window_days")
-    soak_days = t_hours / 24.0
+    soak_days = exposure_time_hours / 24.0
     end_days = max(float(window_days), soak_days * 1.1)
     # Sample early times more densely, and include the exact selected soak time.
     days = np.unique(np.r_[0.0, np.geomspace(end_days * 1e-7, end_days, 500), soak_days])
-    uptake = compute_fickian_uptake(D, h, days * 86400.0)
+    moisture_uptake_fraction = compute_fickian_uptake(
+        moisture_diffusivity, laminate_thickness_meters, days * 86400.0
+    )
     figure = go.Figure(go.Scatter(
-        x=days, y=uptake, mode="lines", name="Predicted uptake",
+        x=days, y=moisture_uptake_fraction, mode="lines", name="Predicted uptake",
         line=dict(color="#368575", width=3), fill="tozeroy",
         fillcolor="rgba(54,133,117,.08)",
         hovertemplate="Time: %{x:.3g} days<br>Equilibrium uptake: %{y:.2%}<extra></extra>",
@@ -198,9 +260,9 @@ def render_moisture_uptake(D, h, t_hours, current_uptake):
     figure.add_hline(y=1.0, line_dash="dash", line_color="#78988e")
     figure.add_vline(x=soak_days, line_dash="dot", line_color="#c87d55")
     figure.add_trace(go.Scatter(
-        x=[soak_days], y=[current_uptake], mode="markers", name="Selected soak time",
+        x=[soak_days], y=[current_moisture_uptake_fraction], mode="markers", name="Selected soak time",
         marker=dict(color="#c87d55", size=11, line=dict(color="white", width=2)),
-        hovertemplate=f"Soak time: {t_hours:g} h<br>Equilibrium uptake: %{{y:.2%}}<extra></extra>",
+        hovertemplate=f"Soak time: {exposure_time_hours:g} h<br>Equilibrium uptake: %{{y:.2%}}<extra></extra>",
     ))
     figure.update_layout(
         height=370, margin=dict(l=10, r=10, t=15, b=10),
@@ -209,7 +271,7 @@ def render_moisture_uptake(D, h, t_hours, current_uptake):
         legend=dict(orientation="h", y=1.02, yanchor="bottom", x=0),
     )
     st.plotly_chart(figure, width="stretch", key="moisture_uptake_chart")
-    st.caption(f"Selected soak time: {t_hours:g} h · {current_uptake:.2%} of equilibrium uptake. "
+    st.caption(f"Selected soak time: {exposure_time_hours:g} h · {current_moisture_uptake_fraction:.2%} of equilibrium uptake. "
                "100% means this material's own equilibrium capacity, not a mass percentage of water.")
     st.caption("Prediction for an initially dry, homogeneous sheet exposed on both faces, using the current "
                "diffusivity and thickness. Diffusivity stays fixed throughout the curve; "
@@ -245,7 +307,9 @@ def interpret_stress_contributions(hygroscopic, thermal):
     return headline, effect
 
 
-def render_3d_deformation(eps_h, eps_t, eps_net, n_frames=20):
+def render_3d_deformation(
+    hygroscopic_strain, thermal_mismatch_strain, net_mismatch_strain, n_frames=20
+):
     """Generates an interactive animated 3D visual with a Play/Pause button."""
     L_nom = 20.0
     x = np.linspace(-L_nom / 2.0, L_nom / 2.0, 25)
@@ -260,7 +324,7 @@ def render_3d_deformation(eps_h, eps_t, eps_net, n_frames=20):
     
     for k, alpha in enumerate(alphas):
         # Progressively apply strain from initial undeformed state to calculated state
-        curv = (alpha * eps_net) * scale_factor * 0.04
+        curv = (alpha * net_mismatch_strain) * scale_factor * 0.04
         Z_dielectric = curv * (X**2 + Y**2) / L_nom
         Z_copper = Z_dielectric + 0.35
 
@@ -704,27 +768,27 @@ def render_simulation_inputs():
     structure, inputs = st.columns([1.65, 1], gap="large")
     with inputs.container(border=True, height="stretch", key="simulation_scenario"):
         st.markdown('<h3 class="scenario-section-heading">Exposure</h3>', unsafe_allow_html=True)
-        delta_T = st.number_input("Change in Temperature (°C or K)", key="field_delta_T", step=5.0)
-        t_hours = st.number_input("Soak Time (hours)", min_value=0.0, key="field_t_hours", step=1.0)
+        temperature_change = st.number_input("Change in Temperature (°C or K)", key="field_delta_T", step=5.0)
+        exposure_time_hours = st.number_input("Soak Time (hours)", min_value=0.0, key="field_t_hours", step=1.0)
 
         st.markdown('<h3 class="scenario-section-heading">Geometry</h3>', unsafe_allow_html=True)
-        h_mm = st.number_input("Laminate Thickness (mm)", min_value=0.001, key="field_h_mm", step=0.1)
+        laminate_thickness_millimeters = st.number_input("Laminate Thickness (mm)", min_value=0.001, key="field_h_mm", step=0.1)
 
         st.markdown('<h3 class="scenario-section-heading">Material Properties</h3>', unsafe_allow_html=True)
         st.markdown('<h4 class="scenario-property-heading">Mechanical Properties</h4>', unsafe_allow_html=True)
-        E = st.number_input("Young's Modulus E (MPa)", min_value=0.001, key="field_E", step=500.0)
-        nu = st.number_input("Poisson's Ratio ν", min_value=-0.99, max_value=0.499,
+        youngs_modulus = st.number_input("Young's Modulus E (MPa)", min_value=0.001, key="field_E", step=500.0)
+        poisson_ratio = st.number_input("Poisson's Ratio ν", min_value=-0.99, max_value=0.499,
                              key="field_nu", step=0.01, format="%.3f")
-        alpha_lam = st.number_input("In-Plane CTE α (ppm/K)", key="field_alpha_lam", step=0.5)
-        alpha_cu = st.number_input("Copper Foil CTE (ppm/K)", key="field_alpha_cu", step=0.5)
+        laminate_thermal_expansion_coefficient = st.number_input("In-Plane CTE α (ppm/K)", key="field_alpha_lam", step=0.5)
+        copper_thermal_expansion_coefficient = st.number_input("Copper Foil CTE (ppm/K)", key="field_alpha_cu", step=0.5)
         st.markdown('<h4 class="scenario-property-heading">Hygroscopic Properties</h4>', unsafe_allow_html=True)
-        D = st.number_input("Diffusion Coefficient D (m²/s)", min_value=0.0, key="field_D",
+        moisture_diffusivity = st.number_input("Diffusion Coefficient D (m²/s)", min_value=0.0, key="field_D",
                             step=1e-14, format="%.2e",
                             help="Effective Fickian diffusivity at chamber temperature.")
-        Csat = st.number_input("Saturation Concentration Csat (mol/m³)", min_value=0.0,
+        saturation_moisture_concentration = st.number_input("Saturation Concentration Csat (mol/m³)", min_value=0.0,
                                key="field_Csat", step=10.0,
                                help="Csat ≈ (WA% / 100) * (Density / 0.018015)")
-        beta = st.number_input("In-Plane CHE β (m³/kg)", min_value=0.0,
+        hygroscopic_expansion_coefficient = st.number_input("In-Plane CHE β (m³/kg)", min_value=0.0,
                                key="field_beta", step=1e-5, format="%.2e",
                                help="In-plane coefficient of hygroscopic expansion.")
 
@@ -737,7 +801,12 @@ def render_simulation_inputs():
         st.selectbox("Material Preset", list(PRESETS), key="preset_selector",
                      on_change=load_preset_values, label_visibility="collapsed",
                      help="Load the selected laminate's properties and conditioning scenario. All inputs remain editable.")
-        render_stack(st.session_state["preset_selector"], h_mm, alpha_lam, alpha_cu)
+        render_stack(
+            st.session_state["preset_selector"],
+            laminate_thickness_millimeters,
+            laminate_thermal_expansion_coefficient,
+            copper_thermal_expansion_coefficient,
+        )
         metadata = PRESET_METADATA.get(st.session_state["preset_selector"])
         if metadata:
             with st.expander("Material reference"):
@@ -746,44 +815,67 @@ def render_simulation_inputs():
                            "datasheets for reference. Original sources retain their respective rights.")
 
     st.session_state["simulation_inputs"] = {key: st.session_state[key] for key in defaults}
-    return (dict(D=D, Csat=Csat, h_mm=h_mm, t_hours=t_hours, beta=beta,
-                 alpha_lam=alpha_lam, alpha_cu=alpha_cu, delta_T=delta_T, E=E, nu=nu),
-            calculate)
+    return (
+        dict(
+            D=moisture_diffusivity,
+            Csat=saturation_moisture_concentration,
+            h_mm=laminate_thickness_millimeters,
+            t_hours=exposure_time_hours,
+            beta=hygroscopic_expansion_coefficient,
+            alpha_lam=laminate_thermal_expansion_coefficient,
+            alpha_cu=copper_thermal_expansion_coefficient,
+            delta_T=temperature_change,
+            E=youngs_modulus,
+            nu=poisson_ratio,
+        ),
+        calculate,
+    )
 
 
 def render_simulation():
-    p, calculate = render_simulation_inputs()
-    D = p["D"]
-    Csat = p["Csat"]
-    h_mm = p["h_mm"]
-    t_hours = p["t_hours"]
-    beta = p["beta"]
-    alpha_lam = p["alpha_lam"]
-    alpha_cu = p["alpha_cu"]
-    delta_T = p["delta_T"]
-    E = p["E"]
-    nu = p["nu"]
+    simulation_inputs, calculate = render_simulation_inputs()
+    moisture_diffusivity = simulation_inputs["D"]
+    saturation_moisture_concentration = simulation_inputs["Csat"]
+    laminate_thickness_millimeters = simulation_inputs["h_mm"]
+    exposure_time_hours = simulation_inputs["t_hours"]
+    hygroscopic_expansion_coefficient = simulation_inputs["beta"]
+    laminate_thermal_expansion_coefficient = simulation_inputs["alpha_lam"]
+    copper_thermal_expansion_coefficient = simulation_inputs["alpha_cu"]
+    temperature_change = simulation_inputs["delta_T"]
+    youngs_modulus = simulation_inputs["E"]
+    poisson_ratio = simulation_inputs["nu"]
 
-    h_meters = h_mm / 1000.0
-    t_seconds = t_hours * 3600.0
+    laminate_thickness_meters = laminate_thickness_millimeters / 1000.0
+    exposure_time_seconds = exposure_time_hours * 3600.0
 
-    scenario = {"preset": st.session_state["preset_selector"], "inputs": p}
+    scenario = {"preset": st.session_state["preset_selector"], "inputs": simulation_inputs}
     if calculate:
-        res = run_analytical_stress_pipeline(
-            D=D, Csat=Csat, h=h_meters, t=t_seconds,
-            beta=beta, alpha_lam=alpha_lam, alpha_cu=alpha_cu,
-            delta_T=delta_T, E=E, nu=nu
+        simulation_results = run_analytical_stress_pipeline(
+            moisture_diffusivity=moisture_diffusivity,
+            saturation_moisture_concentration=saturation_moisture_concentration,
+            laminate_thickness_meters=laminate_thickness_meters,
+            exposure_time_seconds=exposure_time_seconds,
+            hygroscopic_expansion_coefficient=hygroscopic_expansion_coefficient,
+            laminate_thermal_expansion_coefficient=laminate_thermal_expansion_coefficient,
+            copper_thermal_expansion_coefficient=copper_thermal_expansion_coefficient,
+            temperature_change=temperature_change,
+            youngs_modulus=youngs_modulus,
+            poisson_ratio=poisson_ratio,
         )
-        st.session_state["simulation_calculation"] = {"scenario": scenario, "results": res}
+        st.session_state["simulation_calculation"] = {"scenario": scenario, "results": simulation_results}
 
     calculation = st.session_state.get("simulation_calculation")
     if calculation is None or calculation["scenario"] != scenario:
         st.session_state.pop("simulation_calculation", None)
         st.caption("Click Calculate to see the results for this scenario.")
         return
-    res = calculation["results"]
+    simulation_results = calculation["results"]
 
-    st.caption(f"Active Scenario: **{st.session_state['preset_selector']}** | Exposure: **{t_hours:.1f} h** | Thickness: **{h_mm:.2f} mm**")
+    st.caption(
+        f"Active Scenario: **{st.session_state['preset_selector']}** | "
+        f"Exposure: **{exposure_time_hours:.1f} h** | "
+        f"Thickness: **{laminate_thickness_millimeters:.2f} mm**"
+    )
 
     # Equal-height result cards share the moisture and thermal palette.
     with st.container(key="simulation_results"):
@@ -791,22 +883,31 @@ def render_simulation():
         keys = ("result_saturation", "result_hygroscopic", "result_thermal", "result_net")
         col1, col2, col3, col4 = [column.container(border=False, key=key)
                                 for column, key in zip(columns, keys)]
-        col1.metric("Moisture Saturation", f"{res['Mt_Minf'] * 100:.2f} %")
+        col1.metric("Moisture Saturation", f"{simulation_results['Mt_Minf'] * 100:.2f} %")
         col1.caption("Fractional equilibrium uptake (Mt/M∞) achieved under 1D Fickian diffusion at the current exposure duration.")
-        col2.metric("Hygroscopic Strain", f"{res['eps_h']:.2e}")
+        col2.metric("Hygroscopic Strain", f"{simulation_results['eps_h']:.2e}")
         col2.caption("Moisture-driven in-plane swelling strain: positive indicates matrix dilatation from absorbed water.")
-        col3.metric("Thermal Strain", f"{res['eps_t']:.2e}")
+        col3.metric("Thermal Strain", f"{simulation_results['eps_t']:.2e}")
         col3.caption("Unconstrained differential thermal strain: negative indicates copper expands more during heating.")
-        col4.metric("Net Stress Index", f"{res['sigma_index']:.2f} MPa")
+        col4.metric("Net Stress Index", f"{simulation_results['sigma_index']:.2f} MPa")
         col4.caption("Constrained equibiaxial stress: positive denotes in-plane tension; negative denotes compression.")
 
-    render_moisture_uptake(D, h_meters, t_hours, res["Mt_Minf"])
+    render_moisture_uptake(
+        moisture_diffusivity,
+        laminate_thickness_meters,
+        exposure_time_hours,
+        simulation_results["Mt_Minf"],
+    )
 
     st.write("")
     chart, commentary = st.columns([1.1, 0.9], gap="large")
     with chart:
         st.subheader("Stress Contributions and Net Index")
-        values = [res["sigma_hygro"], res["sigma_thermal"], res["sigma_index"]]
+        values = [
+            simulation_results["sigma_hygro"],
+            simulation_results["sigma_thermal"],
+            simulation_results["sigma_index"],
+        ]
         figure = go.Figure(go.Bar(
             x=["Hygroscopic", "Thermal", "Net Stress Index"], y=values,
             marker_color=["#368575", "#c87d55", "#7f8165"],
@@ -824,12 +925,14 @@ def render_simulation():
     with commentary:
         st.subheader("Results")
         with st.container(border=True):
-            headline, effect = interpret_stress_contributions(res["sigma_hygro"], res["sigma_thermal"])
+            headline, effect = interpret_stress_contributions(
+                simulation_results["sigma_hygro"], simulation_results["sigma_thermal"]
+            )
             st.markdown(f"**{headline}**")
-            st.write(f"Hygroscopic contribution: **{res['sigma_hygro']:+.2f} MPa**  \n"
-                     f"Thermal contribution: **{res['sigma_thermal']:+.2f} MPa**")
+            st.write(f"Hygroscopic contribution: **{simulation_results['sigma_hygro']:+.2f} MPa**  \n"
+                     f"Thermal contribution: **{simulation_results['sigma_thermal']:+.2f} MPa**")
             st.write(effect)
-            st.markdown(f"The resulting net stress index is **{res['sigma_index']:+.2f} MPa**.")
+            st.markdown(f"The resulting net stress index is **{simulation_results['sigma_index']:+.2f} MPa**.")
     st.caption(
         "The calculated stress index is an indicator. Assessing delamination risk requires "
         "physical measurements, including interface adhesion tests under the relevant exposure conditions."
