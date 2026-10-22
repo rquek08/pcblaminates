@@ -1,20 +1,26 @@
-"""Educational 2D structure concepts; no geometry-to-property simulation."""
+"""Interactive 3D laminate schematics and constituent property explanations."""
+from collections import Counter, defaultdict
+
 import numpy as np
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import streamlit as st
 from sensitivity_analysis import MATERIAL, PARAMETERS
 
 
 LAYOUTS = {
-    "Homogeneous baseline": "A uniform laminate core without glass reinforcement, weave, fillers or additives. "
-                            "Copper foil is shown separately on the outer faces.",
-    "Balanced": "Two woven-glass plies between similar copper skins: a reinforced structure for comparison.",
-    "Resin-rich": "An open weave leaves several resin-filled pockets between yarns, where reinforcement is absent.",
-    "Glass-dense": "More glass bundles and closer weave spacing illustrate increased reinforcement.",
-    "Copper interfaces": "A flat laminate cross-section shows small copper tabs on the top and bottom surfaces, "
-                         "with narrow vertical copper features extending into the laminate.",
-    "Filled matrix": "Dispersed particles illustrate a resin formulation containing fillers or additives.",
+    "Homogeneous laminate": "A uniform resin core sandwiched between two copper foils.",
+    "Glass fibre weave": "Two plies of interlaced glass yarns embedded in the resin, between outer copper foils.",
+    "Dispersed fillers": "Particles dispersed through the resin illustrate a filled laminate between copper foils.",
+    "Multilayer copper": "A central copper layer, routed tracks above and below it, and patterned outer copper connected by plated vias.",
+}
+LEGACY_LAYOUTS = {
+    "Homogeneous baseline": "Homogeneous laminate",
+    "Balanced": "Glass fibre weave",
+    "Resin-rich": "Glass fibre weave",
+    "Glass-dense": "Glass fibre weave",
+    "Filled matrix": "Dispersed fillers",
+    "Copper interfaces": "Multilayer copper",
+    "Copper-asymmetric": "Multilayer copper",
 }
 COLORS = {"Glass fiber reinforcement": "#368575", "Resin matrix": "#e7c887",
           "Glass weave architecture": "#648d76", "Copper foil interfaces": "#c87d55",
@@ -111,218 +117,549 @@ FACTORS = {
         limit="The model requires measured effective properties for a filled formulation; it does not infer them from filler loading."),
 }
 
-def structure_figure(layout, focus="All constituents"):
-    """Cross-section and plan views with schematic, deliberately unitless geometry."""
-    homogeneous = layout == "Homogeneous baseline"
-    copper_interface = layout == "Copper interfaces"
-    figure = make_subplots(rows=1, cols=2, column_widths=[.66, .34],
-                           subplot_titles=["Laminate cross-section", "Laminate · plan view" if homogeneous or copper_interface else "Weave · plan view"],
-                           horizontal_spacing=.08)
 
-    def opacity(factor):
-        return 1 if focus in ("All constituents", factor) else .3
+class Mesh:
+    """Batch disconnected solids into one Plotly mesh per constituent."""
 
-    def polygon(x, y, factor, label, col=1, color=None, outline=None):
-        color = color or COLORS[factor]
-        figure.add_trace(go.Scatter(x=x, y=y, mode="lines", fill="toself",
-                                    fillcolor=color, opacity=opacity(factor),
-                                    line=outline or dict(color=color, width=0), name=label,
-                                    hovertemplate=label + "<extra></extra>", showlegend=False), row=1, col=col)
+    def __init__(self):
+        self.vertices = []
+        self.triangles = []
+        self.size = 0
 
-    def rectangle(x0, x1, y0, y1, factor, label, col=1):
-        polygon([x0, x1, x1, x0, x0], [y0, y0, y1, y1, y0], factor, label, col=col)
+    def add(self, vertices, triangles):
+        vertices = np.asarray(vertices, dtype=float)
+        self.vertices.append(vertices)
+        self.triangles.append(np.asarray(triangles, dtype=int) + self.size)
+        self.size += len(vertices)
 
-    def finish(legend_colors):
-        for factor, color in legend_colors.items():
-            figure.add_trace(go.Scatter(x=[None], y=[None], mode="markers", name=factor,
-                                        marker=dict(color=color, size=10)))
-        figure.update_xaxes(visible=False, range=[-.15, 10.15], row=1, col=1)
-        figure.update_yaxes(visible=False, range=[0, 5.65], row=1, col=1)
-        figure.update_xaxes(visible=False, range=[-.2, 10.2], row=1, col=2)
-        figure.update_yaxes(visible=False, range=[-.2, 6.2], scaleanchor="x2", scaleratio=1, row=1, col=2)
-        figure.update_layout(height=390, margin=dict(l=10, r=10, t=45, b=80),
-                              legend=dict(orientation="h", y=-.05), dragmode=False,
-                              plot_bgcolor="rgba(0,0,0,0)")
-        return figure
+    def box(self, x0, x1, y0, y1, z0, z1):
+        if x1 <= x0 or y1 <= y0:
+            return
+        self.add(
+            [(x0, y0, z0), (x1, y0, z0), (x1, y1, z0), (x0, y1, z0),
+             (x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)],
+            [(0, 2, 1), (0, 3, 2), (4, 5, 6), (4, 6, 7), (0, 1, 5), (0, 5, 4),
+             (1, 2, 6), (1, 6, 5), (2, 3, 7), (2, 7, 6), (3, 0, 4), (3, 4, 7)],
+        )
 
-    rectangle(0, 10, .6, 4.7, "Resin matrix", "Homogeneous laminate" if homogeneous or copper_interface else "Resin matrix")
-    if copper_interface:
-        top_tabs = ((.8, 2.0), (2.8, 3.9), (4.6, 5.8), (7.0, 8.2), (9.0, 9.7))
-        for left, right in top_tabs:
-            rectangle(left, right, 4.7, 4.95, "Copper foil interfaces", "Top surface copper tab")
-        for left, right in ((.5, 1.55), (2.5, 3.7), (4.6, 5.8), (7.1, 8.3), (9.1, 9.8)):
-            rectangle(left, right, .35, .6, "Copper foil interfaces", "Bottom surface copper tab")
-        rectangle(1.32, 1.47, 3.2, 4.7, "Copper foil interfaces", "Vertical copper feature from top surface")
-        rectangle(7.65, 7.80, .6, 2.0, "Copper foil interfaces", "Vertical copper feature from bottom surface")
-        rectangle(5.12, 5.28, .6, 4.7, "Copper foil interfaces", "Through-thickness copper connection")
-        rectangle(0, 10, 0, 6, "Resin matrix", "Homogeneous laminate · top view", col=2)
-        for left, right in top_tabs:
-            rectangle(left, right, 2.25, 3.75, "Copper foil interfaces", "Top surface copper tab · plan view", col=2)
-        figure.add_trace(go.Scatter(x=[0, 10], y=[3, 3], mode="lines",
-                                    line=dict(color="#78988e", width=1, dash="dash"),
-                                    showlegend=False, hovertemplate="Cross-section position<extra></extra>"), row=1, col=2)
-        figure.add_trace(go.Scatter(x=[1.395, 5.2], y=[3, 3], mode="markers",
-                                    marker=dict(size=7, color="#8d5036", symbol="circle-open", line=dict(width=1.5)),
-                                    opacity=opacity("Copper foil interfaces"), showlegend=False,
-                                    hovertemplate="Vertical copper feature beneath this tab<extra></extra>"), row=1, col=2)
-        return finish({"Homogeneous laminate": COLORS["Resin matrix"],
-                       "Copper foil interfaces": COLORS["Copper foil interfaces"]})
-    rectangle(0, 10, .35, .6, "Copper foil interfaces", "Bottom copper foil")
-    rectangle(0, 10, 4.7, 4.95, "Copper foil interfaces", "Top copper foil")
-    if homogeneous:
-        polygon([0, 10, 10, 0, 0], [0, 0, 6, 6, 0], "Resin matrix", "Homogeneous laminate", col=2)
-        return finish({"Homogeneous laminate": COLORS["Resin matrix"],
-                       "Copper foil interfaces": COLORS["Copper foil interfaces"]})
-    # Both views share the same yarn pitch and x positions. Use data-space
-    # ribbons, so crossing patches stay aligned when the chart is resized.
-    pitch = 1.8 if layout == "Resin-rich" else 1.0 if layout == "Glass-dense" else 1.5
-    half_width = pitch * (.14 if layout == "Resin-rich" else .22)
-    positions = (np.arange(int(10 / pitch)) + .5) * pitch + (10 % pitch) / 2
-    row_positions = (np.arange(int(6 / pitch)) + .5) * pitch + (6 % pitch) / 2
-    x = np.linspace(0, 10, 500)
-    centers = [1.35, 2.65, 3.95] if layout == "Glass-dense" else [1.65, 3.65]
-    amplitude = .3
+    def clip_y(self, minimum):
+        """Slice each solid at the same plane and close the exposed section."""
+        result = Mesh()
+        tolerance = 1e-10
+        offset = 0
+        for vertices, faces in zip(self.vertices, self.triangles):
+            # Faces in the batched mesh use global indices; work per solid.
+            faces = faces - offset
+            offset += len(vertices)
+            if vertices[:, 1].min() >= minimum - tolerance:
+                result.add(vertices, faces)
+                continue
+            if vertices[:, 1].max() <= minimum + tolerance:
+                continue
+            points, triangles, lookup = [], [], {}
 
-    def yarn_height(xs, ply):
-        return centers[ply] - amplitude * np.cos(np.pi * (xs - positions[0]) / pitch + ply * np.pi)
+            def vertex_id(point):
+                key = tuple(np.round(point, 10))
+                if key not in lookup:
+                    lookup[key] = len(points)
+                    points.append(point)
+                return lookup[key]
 
-    for i, center in enumerate(centers):
-        y = yarn_height(x, i)
-        polygon(np.r_[x, x[::-1]], np.r_[y - .11, (y + .11)[::-1]],
-                "Glass fiber reinforcement", "Glass yarn running along the section")
-        # Each transverse yarn sits opposite the longitudinal yarn at that
-        # crossing, alternating above/below rather than floating at one height.
-        theta = np.linspace(0, 2 * np.pi, 50)
-        for crossing, position in enumerate(positions):
-            transverse_height = center + amplitude * (-1) ** (crossing + i)
-            polygon(position + half_width * np.cos(theta), transverse_height + .12 * np.sin(theta),
-                    "Glass fiber reinforcement", "Cross-section of a transverse glass yarn")
-    if layout == "Filled matrix":
-        particle_x, particle_y = np.meshgrid(np.arange(.4, 10, .65), [1.05, 2.35, 2.85, 4.3])
-        figure.add_trace(go.Scatter(x=particle_x.ravel(), y=particle_y.ravel(), mode="markers",
-                                    marker=dict(size=6, color=COLORS["Fillers and additives"]),
-                                    opacity=opacity("Fillers and additives"), showlegend=False,
-                                    hovertemplate="Dispersed filler particle<extra></extra>"), row=1, col=1)
-    for interface in (.6, 4.7):
-        figure.add_trace(go.Scatter(x=x, y=interface + .035 * np.sin(20 * x), mode="lines",
-                                    line=dict(color="#8d5036", width=2), opacity=opacity("Copper foil interfaces"),
-                                    showlegend=False, hovertemplate="Copper/resin interface<extra></extra>"), row=1, col=1)
-    # Draw the resin matrix beneath the plan-view weave so its open cells
-    # clearly contain resin, rather than looking like empty holes.
-    plan_factor = "Glass weave architecture"
-    polygon([0, 10, 10, 0, 0], [0, 0, 6, 6, 0], "Resin matrix", "Resin between glass yarns", col=2)
-    for position in positions:
-        polygon([position - half_width, position + half_width, position + half_width, position - half_width],
-                [0, 0, 6, 6], plan_factor, "Warp glass yarn", col=2, color="#368575")
-    for position in row_positions:
-        polygon([0, 10, 10, 0],
-                [position - half_width, position - half_width, position + half_width, position + half_width],
-                plan_factor, "Fill glass yarn", col=2, color="#86aa9d")
-    for i, px in enumerate(positions):
-        for j, py in enumerate(row_positions):
-            if (i + j) % 2 == 0:
-                # Restore the warp over the fill at alternate intersections.
-                # Its edges are exactly the edges of the underlying warp.
-                h = half_width + .03 * pitch
-                polygon([px - half_width, px + half_width, px + half_width, px - half_width],
-                        [py - h, py - h, py + h, py + h], plan_factor,
-                        "Warp over fill · alternating plain weave", col=2, color="#368575")
-    if layout == "Resin-rich":
-        outline = dict(color="#9b712c", width=1.2, dash="dot")
-        # These outlines occupy gaps between adjacent yarns. Their curved
-        # section boundaries follow the crimp, without covering reinforcement.
-        for number, gap in enumerate((0, 1, 3), start=1):
-            ply = (number - 1) % 2
-            side = 1 if ply == 0 else -1
-            midpoint = (positions[gap] + positions[gap + 1]) / 2
-            pocket_x = np.linspace(midpoint - .25 * pitch, midpoint + .25 * pitch, 50)
-            near = yarn_height(pocket_x, ply) + side * .17
-            far = np.full_like(pocket_x, centers[ply] + side * .65)
-            label = f"R{number} · Resin-rich pocket; no glass reinforcement inside"
-            polygon(np.r_[pocket_x, pocket_x[::-1]], np.r_[near, far[::-1]],
-                    "Resin matrix", label, color="#f4dda8", outline=outline)
-            figure.add_annotation(x=midpoint, y=centers[ply] + side * .46, text=f"R{number}",
-                                  showarrow=False, font=dict(size=11, color="#735121"), row=1, col=1)
-            # Mark open plan-view cells at the same x gaps.
-            row_gap = ply
-            pocket_y = (row_positions[row_gap] + row_positions[row_gap + 1]) / 2
-            h = .25 * pitch
-            polygon([midpoint - h, midpoint + h, midpoint + h, midpoint - h],
-                    [pocket_y - h, pocket_y - h, pocket_y + h, pocket_y + h],
-                    "Resin matrix", label, col=2, color="#f4dda8", outline=outline)
-            figure.add_annotation(x=midpoint, y=pocket_y, text=f"R{number}", showarrow=False,
-                                  font=dict(size=10, color="#735121"), row=1, col=2)
-    return finish(COLORS)
+            for face in faces:
+                polygon = vertices[face]
+                clipped = []
+                for a, b in zip(polygon, np.roll(polygon, -1, axis=0)):
+                    if a[1] >= minimum:
+                        clipped.append(a)
+                    if (a[1] >= minimum) != (b[1] >= minimum):
+                        intersection = a + (b - a) * (minimum - a[1]) / (b[1] - a[1])
+                        intersection[1] = minimum
+                        clipped.append(intersection)
+                indices = []
+                for point in clipped:
+                    index = vertex_id(point)
+                    if not indices or indices[-1] != index:
+                        indices.append(index)
+                if len(indices) > 1 and indices[-1] == indices[0]:
+                    indices.pop()
+                for index in range(1, len(indices) - 1):
+                    triangles.append((indices[0], indices[index], indices[index + 1]))
+
+            edges = Counter(tuple(sorted(edge)) for a, b, c in triangles
+                            for edge in ((a, b), (b, c), (c, a)))
+            boundary = {edge for edge, count in edges.items() if count == 1}
+            neighbours = defaultdict(list)
+            for a, b in boundary:
+                neighbours[a].append(b)
+                neighbours[b].append(a)
+            while boundary:
+                start, current = next(iter(boundary))
+                loop = [start]
+                previous = start
+                boundary.remove(tuple(sorted((start, current))))
+                while current != start:
+                    loop.append(current)
+                    following = next(index for index in neighbours[current] if index != previous)
+                    boundary.remove(tuple(sorted((current, following))))
+                    previous, current = current, following
+                triangles.extend(section_cap(np.asarray(points), loop))
+            result.add(points, triangles)
+        return result
+
+    def route(self, path, z0, z1, width=.18, y_min=0.):
+        """Sweep a flat copper ribbon with mitred bends and a true cutaway edge."""
+        path = np.asarray(path, dtype=float)
+        directions = np.diff(path, axis=0)
+        directions /= np.linalg.norm(directions, axis=1)[:, None]
+        normals = np.column_stack([-directions[:, 1], directions[:, 0]])
+        offsets = np.empty_like(path)
+        offsets[0], offsets[-1] = normals[0] * width / 2, normals[-1] * width / 2
+        for index in range(1, len(path) - 1):
+            bisector = normals[index - 1] + normals[index]
+            offsets[index] = bisector * (width / 2) / np.dot(bisector, normals[index])
+        left, right = path + offsets, path - offsets
+        for index in range(len(path) - 1):
+            polygon = [left[index], right[index], right[index + 1], left[index + 1]]
+            clipped = []
+            for a, b in zip(polygon, polygon[1:] + polygon[:1]):
+                if a[1] >= y_min:
+                    clipped.append(a)
+                if (a[1] >= y_min) != (b[1] >= y_min):
+                    clipped.append(a + (b - a) * (y_min - a[1]) / (b[1] - a[1]))
+            # Intersections at a corner can repeat a vertex; discard them.
+            polygon = []
+            for point in clipped:
+                if not polygon or not np.allclose(point, polygon[-1]):
+                    polygon.append(point)
+            if len(polygon) > 1 and np.allclose(polygon[0], polygon[-1]):
+                polygon.pop()
+            if len(polygon) < 3:
+                continue
+            polygon = np.asarray(polygon)
+            area = np.sum(polygon[:, 0] * np.roll(polygon[:, 1], -1)
+                          - polygon[:, 1] * np.roll(polygon[:, 0], -1))
+            if abs(area) < 1e-10:
+                continue
+            count = len(polygon)
+            vertices = np.vstack([np.column_stack([polygon, np.full(count, z)]) for z in (z0, z1)])
+            triangles = []
+            for corner in range(1, count - 1):
+                triangles.extend([(0, corner + 1, corner), (count, count + corner, count + corner + 1)])
+            for corner in range(count):
+                nxt = (corner + 1) % count
+                triangles.extend([(corner, nxt, nxt + count), (corner, nxt + count, corner + count)])
+            self.add(vertices, triangles)
+
+    def yarn(self, coordinate, height, position, along_x):
+        """Elliptical yarn with a sinusoidal over/under centreline."""
+        theta = np.linspace(0, 2 * np.pi, 10, endpoint=False)
+        length, sides = len(coordinate), len(theta)
+        a = np.broadcast_to(coordinate[:, None], (length, sides))
+        b = np.broadcast_to(position + .23 * np.cos(theta), a.shape)
+        z = height[:, None] + .065 * np.sin(theta)
+        rings = np.stack((a, b, z) if along_x else (b, a, z), axis=-1)
+        points = rings.reshape(-1, 3).tolist()
+        triangles = []
+        for row in range(length - 1):
+            for col in range(sides):
+                a, b = row * sides + col, row * sides + (col + 1) % sides
+                triangles.extend([(a, b, b + sides), (a, b + sides, a + sides)])
+        points.extend([rings[0].mean(axis=0), rings[-1].mean(axis=0)])
+        for col in range(sides):
+            nxt = (col + 1) % sides
+            last = (length - 1) * sides
+            triangles.extend([(length * sides, nxt, col),
+                              (length * sides + 1, last + col, last + nxt)])
+        self.add(points, triangles)
+
+    def particle(self, center, radius):
+        """Closed sphere, using single vertices at each pole."""
+        theta = np.linspace(0, 2 * np.pi, 12, endpoint=False)
+        phi = np.linspace(0, np.pi, 9)[1:-1]
+        points = [(0, 0, radius)]
+        for p in phi:
+            points.extend(zip(radius * np.sin(p) * np.cos(theta),
+                              radius * np.sin(p) * np.sin(theta),
+                              np.full(len(theta), radius * np.cos(p))))
+        points.append((0, 0, -radius))
+        triangles = []
+        for col in range(12):
+            nxt = (col + 1) % 12
+            triangles.extend([(0, 1 + col, 1 + nxt),
+                              (len(points) - 1, 1 + 72 + nxt, 1 + 72 + col)])
+        for row in range(6):
+            for col in range(12):
+                a, b = 1 + row * 12 + col, 1 + row * 12 + (col + 1) % 12
+                triangles.extend([(a, a + 12, b + 12), (a, b + 12, b)])
+        self.add(np.asarray(points) + center, triangles)
+
+    def barrel(self, x, y, z0, z1, outer=.24, inner=.13):
+        """A hollow plated via or annular copper pad, rather than a solid pin."""
+        theta = np.linspace(0, 2 * np.pi, 24, endpoint=False)
+        points = []
+        for radius, z in [(outer, z0), (outer, z1), (inner, z0), (inner, z1)]:
+            points.extend(zip(x + radius * np.cos(theta), y + radius * np.sin(theta), np.full(24, z)))
+        triangles = []
+        for ring_a, ring_b in [(0, 1), (3, 2), (2, 0), (1, 3)]:
+            for col in range(24):
+                nxt = (col + 1) % 24
+                a, b = ring_a * 24 + col, ring_a * 24 + nxt
+                c, d = ring_b * 24 + col, ring_b * 24 + nxt
+                triangles.extend([(a, b, d), (a, d, c)])
+        self.add(points, triangles)
+
+    def trace(self, name, color, opacity=1, group=None, flatshading=False):
+        vertices, faces = np.vstack(self.vertices), np.vstack(self.triangles)
+        return go.Mesh3d(
+            x=vertices[:, 0], y=vertices[:, 1], z=vertices[:, 2],
+            i=faces[:, 0], j=faces[:, 1], k=faces[:, 2], name=name,
+            color=color, opacity=opacity, legendgroup=group or name, showlegend=True,
+            hovertemplate=name + "<extra></extra>", flatshading=flatshading,
+            lighting=dict(ambient=.65, diffuse=.8, specular=.25, roughness=.5),
+            lightposition=dict(x=100, y=-150, z=200),
+        )
 
 
-def select_structure_context():
-    if st.session_state.get("inverse_structure_layout") == "Copper interfaces":
-        st.session_state["inverse_structure_factor"] = "Copper foil interfaces"
+def section_cap(points, loop):
+    """Triangulate a section boundary, retaining collinear boundary vertices."""
+    section = points[:, [0, 2]]
+    polygon = section[loop]
+    area = np.sum(polygon[:, 0] * np.roll(polygon[:, 1], -1)
+                  - polygon[:, 1] * np.roll(polygon[:, 0], -1))
+    if area < 0:
+        loop = loop[::-1]
+    remaining = list(loop)
+    triangles = []
+
+    def cross(a, b):
+        return a[..., 0] * b[..., 1] - a[..., 1] * b[..., 0]
+
+    while len(remaining) > 3:
+        for position, current in enumerate(remaining):
+            previous, following = remaining[position - 1], remaining[(position + 1) % len(remaining)]
+            a, b, c = section[[previous, current, following]]
+            if cross(b - a, c - b) <= 1e-12:
+                continue
+            other = section[[index for index in remaining if index not in (previous, current, following)]]
+            inside = ((cross(b - a, other - a) >= -1e-12)
+                      & (cross(c - b, other - b) >= -1e-12)
+                      & (cross(a - c, other - c) >= -1e-12))
+            if inside.any():
+                continue
+            triangles.append((previous, current, following))
+            remaining.pop(position)
+            break
+        else:
+            raise ValueError("Could not close the laminate cross section.")
+    if len(remaining) == 3:
+        triangles.append(tuple(remaining))
+    return triangles
+
+
+def add_weave(warp, fill, y_min):
+    x_positions = np.linspace(.65, 9.35, 8)
+    y_positions = np.linspace(.7, 6.3, 6)
+    x = np.linspace(0, 10, 120)
+    y = np.linspace(y_min, 7, 90)
+    for ply in (.65, 1.75):
+        for row, position in enumerate(y_positions):
+            if position - .23 < y_min:
+                continue
+            height = ply + .12 * np.cos(np.pi * (x - x_positions[0]) / (x_positions[1] - x_positions[0]) + row * np.pi)
+            warp.yarn(x, height, position, along_x=True)
+        for col, position in enumerate(x_positions):
+            height = ply - .12 * np.cos(np.pi * (y - y_positions[0]) / (y_positions[1] - y_positions[0]) + col * np.pi)
+            fill.yarn(y, height, position, along_x=False)
+
+
+def filler_particles():
+    """Fixed, nonoverlapping particles keep camera and layout comparisons stable."""
+    rng = np.random.default_rng(21)
+    particles = []
+    for _ in range(2000):
+        radius = rng.uniform(.065, .125)
+        center = rng.uniform([radius, radius, radius], [10 - radius, 7 - radius, 2.4 - radius])
+        if all(np.linalg.norm(center - other) > radius + r + .04 for other, r in particles):
+            particles.append((center, radius))
+        if len(particles) == 180:
+            break
+    return particles
+
+
+COPPER_VIAS = ((1.2, 1.25), (2.3, 3.), (5.1, 5.7), (8.65, 4.9), (7.3, 1.15), (6.65, 3.4))
+COPPER_ROUTES = {
+    "top": [
+        [(1.2, 1.25), (1.2, 2.1), (2.1, 3.), (2.3, 3.)],
+        [(2.3, 3.), (3.35, 3.), (3.8, 3.45), (3.8, 4.7), (4.8, 5.7), (5.1, 5.7)],
+        [(8.65, 4.9), (8.65, 3.95), (8.1, 3.4), (6.65, 3.4)],
+        [(5.1, 5.7), (5.1, 6.3), (8.6, 6.3), (9.25, 5.65), (10., 5.65)],
+    ],
+    "inner_lower": [
+        [(2.3, 3.), (2.3, 3.55), (2.85, 4.1), (4., 4.1), (4.35, 4.45),
+         (4.35, 5.05), (4.7, 5.4), (5.7, 5.4), (6.05, 5.05), (6.05, 4.2),
+         (6.5, 3.75), (7.5, 3.75), (8.65, 4.9)],
+        [(1.2, 1.25), (2.1, 1.25), (2.6, 1.75), (4.5, 1.75), (4.95, 2.2),
+         (4.95, 2.9), (5.45, 3.4), (6.65, 3.4)],
+        [(5.1, 5.7), (4.4, 6.4), (.85, 6.4), (.5, 6.05), (.5, 4.7), (1.1, 4.1), (0., 4.1)],
+    ],
+    "inner_upper": [
+        [(2.3, 3.), (1.45, 3.), (.85, 3.6), (.85, 5.), (1.45, 5.6), (3.2, 5.6),
+         (3.65, 6.05), (4.75, 6.05), (5.1, 5.7)],
+        [(5.1, 5.7), (5.1, 4.95), (5.6, 4.45), (5.6, 3.95), (6.15, 3.4), (6.65, 3.4)],
+        [(8.65, 4.9), (9.15, 4.4), (9.15, 2.1), (8.2, 1.15), (7.3, 1.15)],
+        [(1.2, 1.25), (1.2, .65), (3.4, .65), (3.95, 1.2), (3.95, 2.6), (4.45, 3.1),
+         (4.9, 3.1), (5.3, 2.7), (5.3, 0.)],
+    ],
+    "bottom": [
+        [(1.2, 1.25), (1.85, 1.9), (3., 1.9), (3.55, 1.35), (4.4, 1.35),
+         (4.95, 1.9), (6.55, 1.9), (7.3, 1.15)],
+        [(2.3, 3.), (2.3, 4.5), (3.2, 5.4), (6.15, 5.4), (6.75, 6.),
+         (8., 6.), (8.65, 5.35), (8.65, 4.9)],
+        [(6.65, 3.4), (7.6, 3.4), (8.1, 2.9), (9.5, 2.9), (10., 2.9)],
+        [(5.1, 5.7), (5.1, 6.35), (2., 6.35), (1.25, 5.6), (0., 5.6)],
+    ],
+}
+
+
+def add_copper_routes(mesh, layer, z0, z1, y_min):
+    for route in COPPER_ROUTES[layer]:
+        path = np.array(route, dtype=float)
+        # Stop at the annular pads so the trace does not fill a via's bore.
+        for endpoint, neighbour in ((0, 1), (-1, -2)):
+            if any(np.allclose(path[endpoint], center) for center in COPPER_VIAS):
+                direction = path[neighbour] - path[endpoint]
+                path[endpoint] += .15 * direction / np.linalg.norm(direction)
+        mesh.route(path, z0, z1, y_min=y_min)
+
+
+def structure_figure(layout, focus="All constituents", view="Cross section", resin_opacity=.22):
+    """Unitless 3D geometry; visual controls never modify material calculations."""
+    layout = LEGACY_LAYOUTS.get(layout, layout)
+    if layout not in LAYOUTS:
+        raise ValueError("Choose a supported laminate structure.")
+    if view == "Cutaway":
+        view = "Cross section"
+    if view not in ("Cross section", "See-through", "Lift outer foils"):
+        raise ValueError("Choose a supported 3D view.")
+    cross_section = view == "Cross section"
+    y_min = 2.2 if cross_section else 0.
+    gap = .8 if view == "Lift outer foils" else 0.
+    copper = "Copper foil interfaces"
+    resin = Mesh()
+    resin.box(0, 10, 0, 7, 0, 2.4)
+    bottom, top = Mesh(), Mesh()
+    patterned = layout == "Multilayer copper"
+    if patterned:
+        add_copper_routes(top, "top", 2.4 + gap, 2.52 + gap, 0.)
+        add_copper_routes(bottom, "bottom", -.12 - gap, -gap, 0.)
+    else:
+        top.box(0, 10, 0, 7, 2.4 + gap, 2.52 + gap)
+        bottom.box(0, 10, 0, 7, -.12 - gap, -gap)
+
+    figure = go.Figure()
+
+    def add(mesh, label, color, factor, alpha=1):
+        if cross_section:
+            mesh = mesh.clip_y(y_min)
+        if not mesh.vertices:
+            return
+        if focus not in ("All constituents", factor):
+            alpha = min(alpha, .08)
+        figure.add_trace(mesh.trace(label, color, alpha, factor,
+                                    flatshading=factor in ("Resin matrix", copper)))
+
+    # Add the translucent envelope last to make internal solids easier to see.
+    foil_alpha = .22 if view == "See-through" else 1. if cross_section else .96
+    add(bottom, "Bottom copper foil" if not patterned else "Bottom copper traces", COLORS[copper], copper, foil_alpha)
+    add(top, "Top copper foil" if not patterned else "Top copper traces", "#df9b65", copper, foil_alpha)
+    if layout == "Glass fibre weave":
+        warp, fill = Mesh(), Mesh()
+        add_weave(warp, fill, 0.)
+        add(warp, "Glass yarns · warp", "#368575", "Glass fiber reinforcement")
+        add(fill, "Glass yarns · fill", "#91b7a7", "Glass fiber reinforcement")
+    elif layout == "Dispersed fillers":
+        particles = Mesh()
+        for center, radius in filler_particles():
+            particles.particle(center, radius)
+        add(particles, "Dispersed filler particles", COLORS["Fillers and additives"], "Fillers and additives")
+    elif patterned:
+        lower, middle, upper, vias, pads = Mesh(), Mesh(), Mesh(), Mesh(), Mesh()
+        add_copper_routes(lower, "inner_lower", .77, .85, 0.)
+        middle.box(0, 10, 0, 7, 1.16, 1.24)
+        add_copper_routes(upper, "inner_upper", 1.55, 1.63, 0.)
+        for x, y in COPPER_VIAS:
+            vias.barrel(x, y, -.12, 2.52, outer=.20)
+            for z0, z1 in ((-.12 - gap, -gap), (.77, .85), (1.16, 1.24),
+                           (1.55, 1.63), (2.4 + gap, 2.52 + gap)):
+                pads.barrel(x, y, z0, z1, outer=.34)
+        add(lower, "Internal copper layer · lower routes", "#aa6843", copper)
+        add(middle, "Central copper layer", "#bd7c50", copper)
+        add(upper, "Internal copper layer · upper routes", "#e1a170", copper)
+        add(vias, "Plated through-vias", "#ae653e", copper)
+        add(pads, "Via pads", "#d58b58", copper)
+
+    add(resin, "Homogeneous resin core" if layout == "Homogeneous laminate" else "Resin matrix",
+        COLORS["Resin matrix"], "Resin matrix", resin_opacity)
+    # A quiet outline gives the transparent resin a clearly readable volume.
+    edge_x, edge_y, edge_z = [], [], []
+    corners = [(0, y_min, 0), (10, y_min, 0), (10, 7, 0), (0, 7, 0),
+               (0, y_min, 2.4), (10, y_min, 2.4), (10, 7, 2.4), (0, 7, 2.4)]
+    for a, b in [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4),
+                 (0, 4), (1, 5), (2, 6), (3, 7)]:
+        for index in (a, b):
+            x, y, z = corners[index]
+            edge_x.append(x)
+            edge_y.append(y)
+            edge_z.append(z)
+        edge_x.append(None)
+        edge_y.append(None)
+        edge_z.append(None)
+    figure.add_trace(go.Scatter3d(x=edge_x, y=edge_y, z=edge_z, mode="lines",
+                                 line=dict(color="#baaa82", width=2), hoverinfo="skip", showlegend=False))
+    axis = dict(visible=False, showbackground=False, showspikes=False)
+    figure.update_layout(
+        height=560, margin=dict(l=0, r=0, t=65, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        scene=dict(xaxis=dict(axis, range=[-.5, 10.5]), yaxis=dict(axis, range=[-.5, 7.5]),
+                   zaxis=dict(axis, range=[-1.1, 3.6]), bgcolor="rgba(0,0,0,0)",
+                   aspectmode="data", dragmode="orbit",
+                   camera=dict(eye=dict(x=1.45, y=-1.65, z=1.15), projection=dict(type="perspective")),
+                   uirevision=f"laminate-{view}"),
+        legend=dict(orientation="h", x=0, y=1.02, yanchor="bottom", font=dict(size=11),
+                    groupclick="toggleitem"),
+    )
+    return figure
+
+
+PROPERTY_CARDS = {
+    "Resin matrix": (
+        "Resin matrix", "Moisture uptake · swelling",
+        "The resin surrounds the reinforcement or particles. Its chemistry and cure influence how water moves "
+        "through the laminate, how much is absorbed, and how much the matrix swells.",
+        "D · Csat · β · E · αlam",
+    ),
+    "Glass fiber reinforcement": (
+        "Glass fibre reinforcement", "Stiffness · thermal expansion",
+        "Glass yarns constrain the resin. Fibre content and orientation change effective stiffness and thermal "
+        "expansion; the properties depend on the direction being considered.",
+        "E · αlam",
+    ),
+    "Glass weave architecture": (
+        "Weave architecture", "Different behaviour along warp and fill",
+        "Yarns pass over and under one another. Their spacing and crimp leave resin-rich pockets and change "
+        "directional stiffness, Poisson’s ratio and thermal expansion.",
+        "Directional E · ν · αlam",
+    ),
+    "Fillers and additives": (
+        "Fillers and additives", "Stiffness · expansion · moisture transport",
+        "Silica particles increased stiffness and reduced thermal expansion and moisture uptake in the cited epoxy "
+        "systems. The effect depends on filler chemistry, loading and dispersion.",
+        "E · αlam · D · Csat",
+    ),
+    "Copper foil interfaces": (
+        "Patterned copper and vias", "Coverage · interfaces · local restraint",
+        "Etched outer foils leave areas of resin exposed. Copper traces and plated vias introduce additional "
+        "interfaces and local constraints. Copper coverage changes the paths available for moisture entry.",
+        "Copper coverage · αCu · interface geometry",
+    ),
+    "Internal copper": (
+        "Internal copper layers", "Central copper layer · routed tracks",
+        "A continuous copper layer sits at the centre, with routed tracks above and below it. Free trace ends reach "
+        "the board edges; via pads connect the layers. Copper content affects the board’s effective "
+        "thermoelastic properties, while copper layers act as barriers that redistribute moisture.",
+        "Layer sequence · copper fraction · transport paths",
+    ),
+}
+
+LAYOUT_FACTORS = {
+    "Homogeneous laminate": ["Resin matrix", "Copper foil interfaces"],
+    "Glass fibre weave": ["Glass fiber reinforcement", "Glass weave architecture", "Resin matrix"],
+    "Dispersed fillers": ["Fillers and additives", "Resin matrix"],
+    "Multilayer copper": ["Copper foil interfaces", "Internal copper", "Resin matrix"],
+}
+
+
+def render_property_card(factor, homogeneous=False):
+    title, subtitle, description, inputs = PROPERTY_CARDS[factor]
+    source_factor = "Copper foil interfaces" if factor == "Internal copper" else factor
+    note = FACTORS[source_factor]
+    if homogeneous and factor == "Copper foil interfaces":
+        title, subtitle = "Outer copper foils", "Thermal mismatch · moisture entry"
+        description = ("Continuous copper foils bound the resin on both faces. Their expansion relative to the "
+                       "laminate creates thermal mismatch. Copper coverage also changes moisture-entry paths.")
+        inputs = "αlam − αCu · copper coverage"
+    with st.container(border=True):
+        st.markdown(f"**{title}**")
+        st.caption(subtitle)
+        st.write(description)
+        st.caption(inputs)
+        if factor == "Internal copper":
+            st.markdown(f"[Thermoelastic study]({FACTORS['Glass fiber reinforcement']['source']}) · "
+                        f"[Moisture study]({note['source']})")
+        else:
+            st.markdown(f"[Research reference]({note['source']})")
 
 
 def render_showcase():
-    st.subheader("Inhomogeneity in application")
-    st.caption("Explore constituent layouts and the research connecting structure, properties and stress.")
-    if st.session_state.get("inverse_structure_layout") == "Copper-asymmetric":
-        st.session_state["inverse_structure_layout"] = "Copper interfaces"
-        st.session_state["inverse_structure_factor"] = "Copper foil interfaces"
-    layout = st.radio("Structure concept", list(LAYOUTS), horizontal=True,
-                      key="inverse_structure_layout", persist_state="session", on_change=select_structure_context)
-    st.write(LAYOUTS[layout])
-    homogeneous = layout == "Homogeneous baseline"
-    focus_options = (["All constituents", "Resin matrix", "Copper foil interfaces"] if homogeneous or layout == "Copper interfaces" else
-                     ["All constituents", *FACTORS])
-    if st.session_state.get("inverse_structure_focus") not in focus_options:
-        st.session_state.pop("inverse_structure_focus", None)
-    focus = st.selectbox("Highlight a constituent", focus_options, key="inverse_structure_focus")
-    st.plotly_chart(structure_figure(layout, focus), width="stretch", key="inverse_structure_figure",
-                    config=dict(displayModeBar=False))
-    st.caption("Conceptual schematics, not to scale. Yarn shapes, particle size and foil thickness are illustrative. "
-               "These layouts do not change the recommender's material properties or predict a stress field.")
-    if homogeneous:
-        st.caption("The baseline core is uniform throughout. Select another structure concept to introduce reinforcement, "
-                   "resin-rich regions, fillers or patterned copper interfaces.")
-    if layout == "Resin-rich":
-        st.caption("R1–R3 mark resin-filled gaps between the glass yarns. Their boundaries follow the weave; "
-                   "no reinforcement passes through the highlighted pockets.")
-    if layout == "Copper interfaces":
-        st.caption("The plan view shows top-surface copper tabs; the dashed line marks the cross-section position. "
-                   "The cross-section also exposes bottom tabs and vertical copper features. The laminate is uniform, without glass weave.")
-    factor = st.radio("Explore a factor to add" if homogeneous else "Explore a factor", list(FACTORS),
-                      format_func=lambda name: "Resin matrix and resin-rich regions" if name == "Resin matrix" else name,
-                      horizontal=True, key="inverse_structure_factor")
-    note = FACTORS[factor]
-    behaviour, research = st.columns(2, gap="large", border=True)
-    with behaviour:
-        st.markdown("**Structure → property → stress**")
-        st.write(note["effect"])
-        for point in note.get("mechanism", []):
-            st.markdown(f"- {point}")
-        st.caption(note["parameter_note"])
+    st.subheader("3D Laminate Visualiser")
+    st.caption("Look inside a copper–laminate–copper stack and explore how reinforcement, fillers and copper features change its structure.")
+    previous = st.session_state.get("inverse_structure_layout")
+    if previous in LEGACY_LAYOUTS:
+        st.session_state["inverse_structure_layout"] = LEGACY_LAYOUTS[previous]
+    if st.session_state.get("inverse_structure_view") == "Cutaway":
+        st.session_state["inverse_structure_view"] = "Cross section"
+    viewer, details = st.columns([2.1, 1], gap="large")
+    with viewer:
+        layout = st.radio("Laminate structure", list(LAYOUTS), horizontal=True,
+                          key="inverse_structure_layout", persist_state="session")
+        st.write(LAYOUTS[layout])
+        view_col, focus_col = st.columns(2)
+        view = view_col.selectbox("View", ["Cross section", "See-through", "Lift outer foils"],
+                                  key="inverse_structure_view", persist_state="session")
+        focus_options = ["All constituents", "Resin matrix", "Copper foil interfaces"]
+        if layout == "Glass fibre weave":
+            focus_options.append("Glass fiber reinforcement")
+        elif layout == "Dispersed fillers":
+            focus_options.append("Fillers and additives")
+        if st.session_state.get("inverse_structure_focus") not in focus_options:
+            st.session_state.pop("inverse_structure_focus", None)
+        focus = focus_col.selectbox("Highlight", focus_options, key="inverse_structure_focus")
+        opacity = st.slider("Resin opacity", min_value=.05, max_value=.75, value=.22, step=.01,
+                             key="inverse_structure_opacity", persist_state="session")
+        st.plotly_chart(
+            structure_figure(layout, focus, view, opacity), width="stretch", key="inverse_structure_figure",
+            config=dict(displaylogo=False, scrollZoom=True, toImageButtonOptions=dict(filename="laminate_3d")),
+        )
+        st.caption("Drag to rotate · scroll to zoom · right-drag to pan · use the camera reset button to restore the view.")
+        if view == "Cross section":
+            st.caption("The entire stack is sliced on one plane, exposing the cross sections of the resin, copper and any reinforcement or fillers.")
+        elif view == "Lift outer foils":
+            st.caption("Outer copper is lifted away for inspection; internal features stay in their assembled positions.")
+        st.caption("Schematic, not to scale. Fibre, particle and copper dimensions are exaggerated for visibility. "
+                   "These visual controls do not change the material recommender’s inputs.")
+    with details:
+        st.markdown("#### How the structure changes properties")
+        for factor in LAYOUT_FACTORS[layout]:
+            render_property_card(factor, homogeneous=layout == "Homogeneous laminate")
         saved = st.session_state.get("sensitivity_result")
         if (saved and saved["signature"] == st.session_state.get("sensitivity_current_signature")
                 and "ST" in saved["result"]["indices"]):
-            # Display the bridge to the ranking without translating structure into invented values.
-            material = saved["result"]["indices"]
-            top_keys = material[material["Parameter"].isin(MATERIAL)].nlargest(3, "ST")["Parameter"].tolist()
-            relevant = [key for key in note["properties"] if key in top_keys]
+            top = saved["result"]["indices"]
+            top_keys = top[top["Parameter"].isin(MATERIAL)].nlargest(3, "ST")["Parameter"].tolist()
+            related = {key for factor in LAYOUT_FACTORS[layout]
+                       for key in FACTORS.get(factor, {}).get("properties", [])}
+            relevant = [PARAMETERS[key][0] for key in top_keys if key in related]
             if relevant:
-                st.info("Related to the leading sensitivity parameters: " + ", ".join(PARAMETERS[key][0] for key in relevant))
-        st.caption(note["limit"])
-        if note.get("units"):
-            st.caption(note["units"])
-    with research:
-        st.markdown("**Research evidence**")
-        for study in [note, *note.get("additional_research", [])]:
-            st.write(study["evidence"])
-            st.markdown(f"[{study['title']}]({study['source']})")
-            if study.get("scope"):
-                st.caption(study["scope"])
-    with st.expander("Reference Links"):
-        for name, entry in FACTORS.items():
-            label = "Resin matrix and resin-rich regions" if name == "Resin matrix" else name
-            st.markdown(f"**{label}**")
-            for study in [entry, *entry.get("additional_research", [])]:
+                st.info("Related to your leading sensitivity parameters: " + ", ".join(relevant))
+    with st.expander("Research and property details"):
+        for factor in LAYOUT_FACTORS[layout]:
+            if factor == "Internal copper":
+                continue
+            note = FACTORS[factor]
+            title = "Outer copper foils" if layout == "Homogeneous laminate" and factor == "Copper foil interfaces" else PROPERTY_CARDS[factor][0]
+            st.markdown(f"**{title}**")
+            st.write(note["effect"])
+            st.caption(note["parameter_note"])
+            for study in [note, *note.get("additional_research", [])]:
+                st.write(study["evidence"])
                 st.markdown(f"[{study['title']}]({study['source']})")
-    st.caption("For quantitative layout comparison, the next step is measured constituent properties plus "
-               "a laminate or interface model that resolves direction, layer sequence and local geometry.")
