@@ -263,9 +263,11 @@ def render_comparison(runs, configs):
     for run, color in zip(runs, colors):
         data = run["result"]["indices"]
         fig.add_trace(go.Bar(x=data["Label"], y=data["ST"], name=run["config"]["material"], marker_color=color))
-    fig.update_layout(barmode="group", height=400, margin=dict(t=20, b=20),
+    legend_space = 24 * len(runs)
+    fig.update_layout(barmode="group", height=400 + legend_space,
+                      margin=dict(t=30 + legend_space, b=20),
                       yaxis_title="Total effect · ST",
-                      legend=dict(orientation="h", y=-.35))
+                      legend=dict(orientation="h", x=0, xanchor="left", y=1.04, yanchor="bottom"))
     st.plotly_chart(fig, width="stretch", key="sens_comparison_chart")
     st.caption("Each material is analysed separately with the same sampling seed and response. "
                "Its own nominal inputs and displayed bounds determine the ranking. "
