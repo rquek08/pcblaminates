@@ -1,8 +1,9 @@
-"""Notebook-based Sobol studies, with engineering units used by app.py.
+"""Sobol sensitivity analysis and shared hygrothermal stress calculations.
 
-The notebook's A exposure study uses Arrhenius diffusivity; B material uses
-effective diffusivity directly. Sampling blocks are A, B, AB_0, ..., AB_k-1.
-No notebook cells, plotting side effects, or command-line prompts are executed.
+The sensitivity tab analyses three stress responses using Saltelli sampling,
+first- and total-order Sobol indices, and bootstrap confidence intervals.
+The vectorized stress calculator also serves inverse exploration, retaining
+moisture and strain diagnostics. Inputs use the engineering units in app.py.
 """
 from io import BytesIO
 
@@ -27,13 +28,9 @@ STUDIES = ["A · Exposure conditions & geometry", "B · Material properties", "C
 FIXED_META = {key: value[:2] for key, value in PARAMETERS.items()}
 FIXED_META.update(alpha_cu=("Copper CTE", "ppm/K"))
 OUTPUTS = {
-    "sigma_abs": ("Stress-index magnitude", "MPa"),
-    "sigma_index": ("Signed stress index", "MPa"),
+    "sigma_index": ("Stress index", "MPa"),
     "sigma_hygro": ("Moisture contribution", "MPa"),
     "sigma_thermal": ("Thermal contribution", "MPa"),
-    "Mt_Minf": ("Fractional moisture uptake", "dimensionless"),
-    "W_t": ("Absorbed water concentration", "kg/m³"),
-    "eps_h": ("Hygroscopic strain", "dimensionless"),
 }
 
 
@@ -42,10 +39,6 @@ def reference_baseline(study):
                 alpha_cu=17.0 if study == STUDIES[0] else 16.5,
                 D=2.1e-12, Csat=222.04, beta=1.4e-4, h_mm=1.6,
                 t_hours=476500.0 / 3600, delta_T=50.0)
-
-
-# Preserve compatibility with existing analysis scripts.
-notebook_baseline = reference_baseline
 
 
 def default_ranges(keys):
@@ -217,17 +210,13 @@ def estimate_indices(y, N, k, n_boot=500, seed=7):
     return result
 
 
-def run_analysis(p, ranges, diffusion, target="sigma_abs", N=4096, seed=12345,
-                 method="Sobol", trajectories=40):
+def run_analysis(p, ranges, diffusion, target="sigma_index", N=4096, seed=12345):
+    """Run a Sobol study with blocks A, B, AB_0, ..., AB_k-1."""
     if target not in OUTPUTS:
         raise ValueError("Choose a supported sensitivity output.")
     if diffusion["mode"] == "Arrhenius" and any(row["Parameter"] == "D" for row in ranges):
         raise ValueError("Effective D is calculated from temperature in the Arrhenius study; "
                          "use fixed-D mode to vary diffusivity independently.")
-    if method == "Morris":
-        return run_morris(p, ranges, diffusion, target, trajectories, seed)
-    if method != "Sobol":
-        raise ValueError("Choose Morris or Sobol analysis.")
     X = saltelli_samples(ranges, N, seed)
     keys = [row["Parameter"] for row in ranges]
     varied = dict(p, **{key: X[:, i] for i, key in enumerate(keys)})
@@ -256,52 +245,8 @@ def output_summary(out):
             ("D_effective", "Effective diffusivity", "m²/s"), ("Fo", "Fourier number", "dimensionless"),
             ("Mt_Minf", "Fractional moisture uptake", "dimensionless"), ("W_t", "Absorbed moisture density", "kg/m³"),
             ("eps_h", "Hygroscopic strain", "dimensionless"), ("eps_t", "Thermal mismatch strain", "dimensionless"),
-            ("sigma_abs", "Stress-index magnitude", "MPa"), ("sigma_index", "Signed stress index", "MPa")]
+            ("sigma_abs", "Stress-index magnitude", "MPa"), ("sigma_index", "Stress index", "MPa")]
     ])
-
-
-def run_morris(p, ranges, diffusion, target, trajectories=40, seed=12345):
-    """Six-level Morris design; elementary effects in normalized input space."""
-    if not isinstance(trajectories, int) or trajectories < 2:
-        raise ValueError("Use at least two Morris trajectories.")
-    keys = [row["Parameter"] for row in ranges]
-    if not keys:
-        raise ValueError("Choose at least one distinct supported parameter.")
-    rng = np.random.default_rng(seed)
-    k, delta = len(keys), 0.6
-    paths, orders, signs = [], [], []
-    for _ in range(trajectories):
-        low = rng.choice([0.0, 0.2, 0.4], size=k)
-        sign = rng.choice([-1, 1], size=k)
-        x = np.where(sign < 0, low + delta, low)
-        order = rng.permutation(k)
-        path = [x.copy()]
-        for j in order:
-            x = x.copy()
-            x[j] += sign[j] * delta
-            path.append(x)
-        paths.extend(path)
-        orders.append(order)
-        signs.append(sign)
-    X = scale_samples(np.clip(np.asarray(paths), 0, 1), ranges)
-    out = evaluate_samples(dict(p, **{key: X[:, i] for i, key in enumerate(keys)}), diffusion)
-    response = np.asarray(out[target])
-    if not np.all(np.isfinite(response)):
-        raise ValueError("Model output must be finite.")
-    y = response.reshape(trajectories, k + 1)
-    effects = np.empty((trajectories, k))
-    for i in range(trajectories):
-        for step, j in enumerate(orders[i]):
-            effects[i, j] = (y[i, step + 1] - y[i, step]) / (signs[i][j] * delta)
-    table = pd.DataFrame(dict(Parameter=keys, Label=[PARAMETERS[key][0] for key in keys],
-                              mu=effects.mean(axis=0), mu_star=np.abs(effects).mean(axis=0),
-                              sigma=effects.std(axis=0, ddof=1)))
-    samples = pd.DataFrame({key: X[:, i] for i, key in enumerate(keys)})
-    for key, values in out.items():
-        samples[key] = values
-    samples["Trajectory"] = np.repeat(np.arange(1, trajectories + 1), k + 1)
-    samples["Step"] = np.tile(np.arange(k + 1), trajectories)
-    return dict(indices=table, summary=output_summary(out), samples=samples)
 
 
 def excel_report(result, config):
@@ -313,17 +258,11 @@ def excel_report(result, config):
               "Unit": FIXED_META[key][1]} for key, value in config["baseline"].items()
              if key not in [row["Parameter"] for row in config["ranges"]]
              and not (key == "D" and config["diffusion"]["mode"] == "Arrhenius")]
-    morris = config.get("method", "Sobol") == "Morris"
-    notes = pd.DataFrame({"How to read": ([
-        "Morris mu_star: mean absolute elementary effect; sigma: variation from nonlinearity and/or interactions.",
-        "Effects use normalized input steps on a six-level grid (delta=0.6), in the selected output's units, not variance shares.",
-        "Summary statistics describe trajectory samples, not independent distribution draws or uncertainty bounds.",
-    ] if morris else [
+    notes = pd.DataFrame({"How to read": [
         "S1: main contribution to output variance. ST: main effect plus every interaction involving the input.",
         "ST - S1: interaction contribution involving this input. Total-order indices overlap; do not add them as independent shares.",
         "Intervals are paired bootstrap 95% percentiles (500 resamples), not material or model validation uncertainty.",
         "Output summary uses A and B base samples only. Samples includes all Saltelli cross-sampling blocks.",
-    ]) + [
         "Inputs use app engineering units. E is MPa, CTE ppm/K, time h, thickness mm; all samples start dry.",
         "Arrhenius: D = D0 exp[-Ea/(8.314 T)], T = T_ref_C + 273.15 + delta_T.",
         "Independent input distributions and bounds determine the rankings. No interface failure is predicted.",
@@ -336,8 +275,8 @@ def excel_report(result, config):
             writer, sheet_name="Nominal inputs", index=False)
         pd.DataFrame(config["ranges"]).to_excel(writer, sheet_name="Variable inputs", index=False)
         pd.DataFrame(fixed).to_excel(writer, sheet_name="Fixed inputs", index=False)
-        result["indices"].sort_values("mu_star" if morris else "ST", ascending=False).to_excel(
-            writer, sheet_name="Morris effects" if morris else "Sobol S1 ST", index=False)
+        result["indices"].sort_values("ST", ascending=False).to_excel(
+            writer, sheet_name="Sobol S1 ST", index=False)
         result["summary"].to_excel(writer, sheet_name="Output summary", index=False)
         result["samples"].to_excel(writer, sheet_name="Samples", index=False)
         notes.to_excel(writer, sheet_name="How to read", index=False)

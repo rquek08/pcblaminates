@@ -300,7 +300,8 @@ def render_showcase():
             st.markdown(f"- {point}")
         st.caption(note["parameter_note"])
         saved = st.session_state.get("sensitivity_result")
-        if saved and saved["signature"] == st.session_state.get("sensitivity_current_signature"):
+        if (saved and saved["signature"] == st.session_state.get("sensitivity_current_signature")
+                and "ST" in saved["result"]["indices"]):
             # Display the bridge to the ranking without translating structure into invented values.
             material = saved["result"]["indices"]
             top_keys = material[material["Parameter"].isin(MATERIAL)].nlargest(3, "ST")["Parameter"].tolist()

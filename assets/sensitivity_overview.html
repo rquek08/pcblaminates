@@ -20,9 +20,7 @@
     .pathway.thermal { --accent: #a7643b; }
     .pathway.stress { --accent: #6d7255; }
     .path-label { margin: 0 0 9px; color: var(--accent); font-size: 11px; font-weight: 650; letter-spacing: .5px; }
-    .heading-row { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
-    h2 { margin: 0; font-size: 27px; line-height: 1.15; }
-    .intro { margin: 8px 0 0; max-width: 720px; color: #60756d; font-size: 13px; line-height: 1.5; }
+    .motion-controls { display: flex; justify-content: flex-end; }
     .motion-control {
       flex-shrink: 0; border: 1px solid #d5dfd8; border-radius: 999px;
       background: #fff9; padding: 7px 11px; color: #60756d; font-size: 11px;
@@ -84,7 +82,6 @@
       .scene { max-height: 170px; }
       .factors { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .factor { min-height: 124px; }
-      h2 { font-size: 24px; }
       .motion-control { font-size: 10px; padding: 6px 9px; }
     }
     @media (prefers-reduced-motion: reduce) {
@@ -96,12 +93,8 @@
   </style>
 </head>
 <body>
-  <section class="guide" data-stage="uptake" aria-labelledby="guide-heading">
-    <div class="heading-row">
-      <div>
-        <h2 id="guide-heading">What are we varying?</h2>
-        <p class="intro">Follow the two strain pathways, then see how stiffness turns their combined mismatch into a stress index.</p>
-      </div>
+  <section class="guide" data-stage="uptake" aria-label="Animated guide to strain and stress parameters">
+    <div class="motion-controls">
       <button class="motion-control" type="button" aria-pressed="false">Pause animation</button>
     </div>
     <section id="panel-moisture" class="pathway moisture" aria-labelledby="heading-moisture">

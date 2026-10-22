@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from sensitivity_analysis import (
-    EXPOSURE, FIXED_META, MATERIAL, OUTPUTS, PARAMETERS, STUDIES,
+    EXPOSURE, FIXED_META, MATERIAL, OUTPUTS as RESPONSE_OPTIONS, PARAMETERS, STUDIES,
     default_ranges, excel_report, material_ranges, run_analysis,
 )
 from typography import document_fonts
@@ -18,12 +18,13 @@ from typography import document_fonts
 @st.cache_data(show_spinner=False, max_entries=6)
 def calculate(config):
     return run_analysis(config["baseline"], config["ranges"], config["diffusion"],
-                        target=config["target"], N=config["N"], seed=config["seed"],
-                        method="Sobol")
+                        target=config["target"], N=config["N"], seed=config["seed"])
 
 
 def render_parameter_overview():
     """Explain the nine varied inputs in an isolated, animated guide."""
+    st.header("What are we varying?")
+    st.caption("Follow the two strain pathways, then see how stiffness turns their combined mismatch into a stress index.")
     overview = (Path(__file__).parent / "assets" / "sensitivity_overview.html").read_text(encoding="utf-8")
     st.iframe(document_fonts(overview), height="content")
 
@@ -61,6 +62,9 @@ def render_sensitivity(records):
         st.title("Sensitivity Analysis")
     st.caption("Choose materials and study how exposure conditions or property variations affect moisture uptake, swelling and stress.")
     render_parameter_overview()
+    st.header("Which parameters matter most?")
+    st.caption("Choose a response and parameter ranges, then use Sobol analysis to see which inputs "
+               "contribute most to variation in that response.")
     presets = {r["name"]: r for r in records}
     custom = "Custom material / manual entry"
     custom_values = dict(E=25000., nu=.2, alpha_lam=12., alpha_cu=16.5,
@@ -80,8 +84,10 @@ def render_sensitivity(records):
             st.info("Choose at least one material.")
             return
         study = st.radio("Study", STUDIES, index=1, horizontal=True, key="sens_study", persist_state="session")
-        target = st.selectbox("Response to analyse", list(OUTPUTS),
-                              format_func=lambda key: f"{OUTPUTS[key][0]} ({OUTPUTS[key][1]})",
+        if st.session_state.get("sens_output") not in RESPONSE_OPTIONS:
+            st.session_state["sens_output"] = "sigma_index"
+        target = st.selectbox("Response to analyse", list(RESPONSE_OPTIONS),
+                              format_func=lambda key: f"{RESPONSE_OPTIONS[key][0]} ({RESPONSE_OPTIONS[key][1]})",
                               key="sens_output", persist_state="session")
         st.caption("Sobol analysis estimates how much each input and its interactions contribute to response variance.")
         range_mode = st.radio("Parameter ranges", ["Around each material", "Broad exploratory ranges"],
@@ -223,7 +229,7 @@ def render_sensitivity(records):
     active_signature = signature + config["material"]
     st.session_state["sensitivity_current_signature"] = active_signature
     st.session_state["sensitivity_result"] = dict(signature=active_signature, **active)
-    st.caption(f"Results for {config['material']} · Sobol · {OUTPUTS[target][0]}")
+    st.caption(f"Results for {config['material']} · Sobol · {RESPONSE_OPTIONS[target][0]}")
     render_results(active["result"], config, active_signature)
 
 
@@ -259,7 +265,7 @@ def render_results(result, config, signature):
                                    for key, (label, unit) in FIXED_META.items()]), hide_index=True, width="stretch")
         st.dataframe(pd.DataFrame(config["ranges"]).drop(columns="Parameter"), hide_index=True, width="stretch")
     table = result["indices"].sort_values("ST", ascending=False)
-    unit = OUTPUTS[config["target"]][1]
+    unit = RESPONSE_OPTIONS[config["target"]][1]
     st.subheader("Parameter Importance")
     first, total, interactions = st.columns(3)
     with first.container(border=True):
@@ -303,7 +309,7 @@ def render_results(result, config, signature):
         st.caption(f"Preview of the first 500 of {len(result['samples']):,} model evaluations. Downloads include all rows.")
         st.markdown("#### Model and method")
         st.latex(r"\sigma_{\mathrm{index}}=\frac{E}{1-\nu}\left[\beta W_t+(\alpha_{\mathrm{lam}}-\alpha_{\mathrm{Cu}})\Delta T\right]")
-        st.write("The default response is the magnitude of this signed index. Uptake starts dry and uses "
+        st.write("The stress index retains the sign of the combined moisture and thermal contributions. Uptake starts dry and uses "
                  "one-dimensional plane-sheet diffusion with both faces exposed. Moisture uptake is calculated "
                  "from diffusivity, time, and thickness; Csat sets equilibrium concentration.")
         st.write("A 60-term Fickian series is used with a short-time approximation near zero uptake. "

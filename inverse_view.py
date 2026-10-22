@@ -39,18 +39,7 @@ def render_inverse(records):
     st.caption("Find materials for your application, then explore the structures behind their properties.")
     render_recommender(records)
     st.divider()
-    saved = st.session_state.get("sensitivity_result")
-    if saved and saved.get("config", {}).get("method") == "Morris":
-        # The existing gallery optionally reads Sobol ST hints. Leave the
-        # gallery unchanged and omit that optional context for a Morris run.
-        signature = st.session_state.get("sensitivity_current_signature")
-        st.session_state["sensitivity_current_signature"] = None
-        try:
-            render_showcase()
-        finally:
-            st.session_state["sensitivity_current_signature"] = signature
-    else:
-        render_showcase()
+    render_showcase()
 
 
 def select_available(label, options, key):
