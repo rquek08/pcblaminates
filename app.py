@@ -448,6 +448,9 @@ def render_style():
     .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6,
     .st-key-home_link button p {
         font-family: var(--pcb-heading-font) !important; font-weight: 400 !important; }
+    .stApp h2 { font-size: 2rem !important; line-height: 1.25 !important; }
+    .stApp h3 { font-size: 1.5rem !important; line-height: 1.3 !important; }
+    .stApp h4 { font-size: 1.1rem !important; line-height: 1.35 !important; }
     [data-testid="stNumberInput"] input,
     [data-testid="stMetricValue"], [data-testid="stMetricValue"] *,
     [data-testid="stMetricDelta"], [data-testid="stSliderTickBar"],
@@ -518,15 +521,10 @@ def render_style():
     .st-key-stress_analyser_header h1,
     .st-key-sensitivity_analysis_header h1,
     .st-key-inverse_exploration_header h1 { padding: 0; }
-    .st-key-simulation_scenario .scenario-title,
-    .st-key-simulation_structure .scenario-title {
-        font-size: 2rem; font-weight: 700; padding: 0; margin: 0 0 .5rem; }
-    .st-key-simulation_scenario .scenario-preset-heading {
-        font-size: 1.65rem; font-weight: 650; padding: 0; margin: .75rem 0 .4rem; }
     .st-key-simulation_scenario .scenario-section-heading {
-        font-size: 1.35rem; font-weight: 650; padding: 0; margin: 1rem 0 .4rem; }
+        padding: 0; margin: 1rem 0 .4rem; }
     .st-key-simulation_scenario .scenario-property-heading {
-        font-size: 1.1rem; font-weight: 650; padding: 0; margin: .5rem 0 .4rem; }
+        padding: 0; margin: .5rem 0 .4rem; }
     [data-testid="stMetricValue"] { font-size: 1.8rem; }
     .st-key-simulation_results [data-testid="stColumn"] {
         position: relative; overflow: hidden; border-radius: 1rem;
@@ -796,7 +794,7 @@ def render_simulation_inputs():
             calculate = st.button("Calculate", type="primary", key="calculate_simulation")
 
     with structure.container(border=True, height="stretch", key="simulation_structure"):
-        st.markdown('<h2 class="scenario-title">Choose your laminate</h2>', unsafe_allow_html=True)
+        st.header("Choose your laminate")
         st.caption("Start with a preset or enter your own properties. ")
         st.selectbox("Material Preset", list(PRESETS), key="preset_selector",
                      on_change=load_preset_values, label_visibility="collapsed",

@@ -49,7 +49,7 @@ def select_available(label, options, key):
 
 
 def render_recommender(records):
-    st.subheader("Material recommender")
+    st.header("Material recommender")
     st.caption("Set your application conditions and requirements. Rank the library by predicted stress, swelling or moisture content.")
     with st.container(border=True):
         source = st.radio("Material library", ["Included presets", "Upload CSV"], horizontal=True,

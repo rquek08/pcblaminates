@@ -601,7 +601,7 @@ def render_property_card(factor, homogeneous=False):
 
 
 def render_showcase():
-    st.subheader("3D Laminate Visualiser")
+    st.header("3D Laminate Visualiser")
     st.caption("Look inside a copper–laminate–copper stack and explore how reinforcement, fillers and copper features change its structure.")
     previous = st.session_state.get("inverse_structure_layout")
     if previous in LEGACY_LAYOUTS:

@@ -218,7 +218,7 @@ class LaminateVisualiserTests(unittest.TestCase):
         app = AppTest.from_string("from laminate_showcase import render_showcase\nrender_showcase()",
                                   default_timeout=30).run()
         self.assertFalse(app.exception)
-        self.assertIn("3D Laminate Visualiser", [item.value for item in app.subheader])
+        self.assertIn("3D Laminate Visualiser", [item.value for item in app.header])
         for layout in LAYOUTS:
             app.radio(key="inverse_structure_layout").set_value(layout).run()
             self.assertFalse(app.exception)
