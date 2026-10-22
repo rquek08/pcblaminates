@@ -138,8 +138,6 @@ def render_recommender(records):
                      "Materials meeting your output requirements are ranked by the selected objective, smallest first.")
             st.write("Large libraries are calculated in batches. Repeated requests are cached, and only the best "
                      "results are retained for display. The ranking uses all six material properties.")
-            st.caption("A small net stress index can reflect cancellation between opposing moisture and thermal contributions. "
-                       "Inspect those contributions alongside the ranking. This simplified model does not establish delamination safety.")
         config = dict(condition=condition, material_class=None if material_class == all_classes else material_class,
                       application=application, objective=objective, property_bounds=property_bounds,
                       output_limits=output_limits, shortlist_size=int(count), library_source=source)
