@@ -12,19 +12,28 @@
     button:focus-visible { outline: 3px solid #368575; outline-offset: 4px; }
     .guide {
       --accent: #368575;
+      position: relative;
       padding: 24px; border: 1px solid #dce7e2; border-radius: 20px;
       background: linear-gradient(125deg, #f5f9f6, #fdfcf9);
     }
     .pathway { margin-top: 24px; }
+    .pathway.moisture { margin-top: 0; }
+    .moisture .scene-row > :first-child { align-self: start; }
     .pathway + .pathway { padding-top: 22px; border-top: 1px solid #dce5dd; }
     .pathway.thermal { --accent: #a7643b; }
     .pathway.stress { --accent: #6d7255; }
     .path-label { margin: 0 0 9px; color: var(--accent); font-size: 11px; font-weight: 650; letter-spacing: .5px; }
-    .motion-controls { display: flex; justify-content: flex-end; }
+    .motion-controls { position: absolute; top: 16px; right: 16px; z-index: 1; }
     .motion-control {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px;
       flex-shrink: 0; border: 1px solid #d5dfd8; border-radius: 999px;
-      background: #fff9; padding: 7px 11px; color: #60756d; font-size: 11px;
+      background: #fff9; padding: 7px; color: #60756d;
     }
+    .motion-control svg { width: 16px; height: 16px; fill: currentColor; }
+    .motion-control .play-icon,
+    .motion-control[aria-pressed="true"] .pause-icon { display: none; }
+    .motion-control[aria-pressed="true"] .play-icon { display: block; }
     .scene-row {
       display: grid; grid-template-columns: minmax(190px, .8fr) minmax(290px, 1.6fr);
       gap: 22px; align-items: center;
@@ -82,7 +91,6 @@
       .scene { max-height: 170px; }
       .factors { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .factor { min-height: 124px; }
-      .motion-control { font-size: 10px; padding: 6px 9px; }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -95,7 +103,13 @@
 <body>
   <section class="guide" data-stage="uptake" aria-label="Animated guide to strain and stress parameters">
     <div class="motion-controls">
-      <button class="motion-control" type="button" aria-pressed="false">Pause animation</button>
+      <button class="motion-control" type="button" aria-pressed="false"
+              aria-label="Pause animation" title="Pause animation">
+        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <g class="pause-icon"><rect x="4" y="3" width="3" height="10" rx=".5"/><rect x="9" y="3" width="3" height="10" rx=".5"/></g>
+          <path class="play-icon" d="M5 3l8 5-8 5Z"/>
+        </svg>
+      </button>
     </div>
     <section id="panel-moisture" class="pathway moisture" aria-labelledby="heading-moisture">
       <div class="scene-row">
@@ -259,7 +273,9 @@
       motionControl.addEventListener('click', () => {
         const paused = guide.classList.toggle('paused');
         motionControl.setAttribute('aria-pressed', String(paused));
-        motionControl.textContent = paused ? 'Play animation' : 'Pause animation';
+        const action = paused ? 'Play animation' : 'Pause animation';
+        motionControl.setAttribute('aria-label', action);
+        motionControl.title = action;
       });
     })();
   </script>

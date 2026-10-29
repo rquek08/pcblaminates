@@ -150,8 +150,27 @@ def render_sensitivity_controls(records):
                        "These illustrative diffusion constants apply to every material in this run.")
 
     st.markdown("#### Material inputs and parameter ranges")
-    range_mode = st.radio("Parameter ranges", ["Around each material", "Broad exploratory ranges"],
-                          key="sens_range_basis", persist_state="session")
+    st.html("""
+        <style>
+        .st-key-sens_range_options [data-testid="stRadioOption"],
+        .st-key-sens_range_option_help [data-testid="stMarkdown"] {
+            min-height: 2rem;
+            display: flex;
+            align-items: center;
+        }
+        .st-key-sens_range_option_help { gap: 0; }
+        </style>
+    """)
+    st.markdown("Parameter ranges")
+    with st.container(horizontal=True, gap="small", vertical_alignment="top",
+                      key="sens_range_options"):
+        range_mode = st.radio("Parameter ranges", ["Around each material", "Broad exploratory ranges"],
+                              key="sens_range_basis", persist_state="session", label_visibility="collapsed")
+        with st.container(width="content", key="sens_range_option_help"):
+            st.markdown("", help="Compare sensitivity near the actual material presets by varying inputs "
+                        "around each material's nominal values.")
+            st.markdown("", help="Explore the influence of properties across a wider set of possible values, "
+                        "using broad bounds rather than ranges around each material preset.")
     percent, factor = 10.0, 2.0
     if range_mode == "Around each material":
         percent = st.number_input("Variation around nominal (±%)", min_value=0.1,
