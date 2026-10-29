@@ -96,7 +96,7 @@ FACTORS = {
             source="https://doi.org/10.1163/156856109X433982",
             scope="The interfacial findings apply to the tested epoxy/copper system; they are not a universal adhesion-degradation law.",
         )],
-        limit="The uptake model assumes a sheet exposed on both faces. Copper coverage barriers, adhesion degradation, "
+        limit="The uptake model assumes one exposed face and an impermeable copper interface. Partial copper coverage, adhesion degradation, "
               "copper load sharing and local interface stresses are outside the current stress index."),
     "Fillers and additives": dict(
         properties=["E", "alpha_lam", "D", "Csat"],

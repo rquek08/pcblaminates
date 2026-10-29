@@ -11,7 +11,7 @@ from inverse_analysis import (
     APPLICATION_DEFAULTS, OBJECTIVES, prepare_library, recommend_materials, records_from_csv,
 )
 from laminate_showcase import render_showcase
-from sensitivity_analysis import MATERIAL, PARAMETERS
+from sensitivity_analysis import MATERIAL, MODEL_VERSION, PARAMETERS
 
 
 @st.cache_data(show_spinner=False, max_entries=4)
@@ -138,9 +138,11 @@ def render_recommender(records):
                      "Materials meeting your output requirements are ranked by the selected objective, smallest first.")
             st.write("Large libraries are calculated in batches. Repeated requests are cached, and only the best "
                      "results are retained for display. The ranking uses all six material properties.")
+            st.write("Moisture enters through one exposed face of the laminate. The opposite face interfaces "
+                     "with copper foil and is treated as impermeable; the diffusion term uses (2h)² for laminate thickness h.")
         config = dict(condition=condition, material_class=None if material_class == all_classes else material_class,
                       application=application, objective=objective, property_bounds=property_bounds,
-                      output_limits=output_limits, shortlist_size=int(count), library_source=source)
+                      output_limits=output_limits, shortlist_size=int(count), library_source=source, model_version=MODEL_VERSION)
         signature = hashlib.sha256(json.dumps(dict(library=digest, config=config), sort_keys=True).encode()).hexdigest()
         for error in errors:
             st.error(error)
@@ -184,6 +186,13 @@ def render_recommendations(result, config, digest, signature):
            for key in ("sigma_abs", "sigma_index", "sigma_hygro", "sigma_thermal", "W_t")},
         "Hygroscopic strain": st.column_config.NumberColumn(format="%.3e"),
     })
+    with st.expander("Compare recommended materials"):
+        st.caption("Compare the same shortlist in ranking order. Each column has its own scale: "
+                   "darker green means a larger nonnegative value; signed stresses use orange for negative "
+                   "and green for positive values. Hover over a cell for its value and units.")
+        st.plotly_chart(recommendation_heatmap(candidates), width="stretch", key="inverse_shortlist_heatmap")
+        st.caption("A small net stress index can result from moisture and thermal contributions cancelling. "
+                   "Colours show relative values, not material suitability or safety.")
     with st.expander("Inspect a recommended material"):
         # The signature gives changing result sets their own inspection state.
         selected = st.selectbox("Recommended material", candidates.index.tolist(),
@@ -207,3 +216,50 @@ def render_recommendations(result, config, digest, signature):
     settings_col.download_button("Download application settings (JSON)",
                                  json.dumps(dict(library_digest=digest, **config), indent=2).encode(),
                                  "recommendation_settings.json", "application/json", key="inverse_settings_download")
+
+
+def recommendation_heatmap(candidates):
+    """Compare current results with independent column scales and raw-value hover details."""
+    metrics = [
+        ("sigma_abs", "Stress<br>magnitude<br>(MPa)", "MPa", False),
+        ("sigma_index", "Signed<br>index<br>(MPa)", "MPa", True),
+        ("sigma_hygro", "Moisture<br>stress<br>(MPa)", "MPa", False),
+        ("sigma_thermal", "Thermal<br>stress<br>(MPa)", "MPa", True),
+        ("eps_h", "Swelling<br>strain<br>(−)", "dimensionless", False),
+        ("W_t", "Absorbed<br>water<br>(kg/m³)", "kg/m³", False),
+        ("Mt_Minf", "Moisture<br>uptake<br>(%)", "%", False),
+    ]
+    rows = candidates.to_dict("records")
+    row_labels = [f"{row['rank']}. {row['name']}" for row in rows]
+    figure = go.Figure()
+    for column, (key, label, unit, signed) in enumerate(metrics):
+        values = [float(row[key]) * (100 if key == "Mt_Minf" else 1) for row in rows]
+        scale = max((abs(value) for value in values), default=0) or 1.0
+        text = [[f"{value:.3g}"] for value in values]
+        details = [[[row["name"], row["material_class"], value, unit, row["rank"], label.replace("<br>", " ")]]
+                   for row, value in zip(rows, values)]
+        figure.add_trace(go.Heatmap(
+            # Explicit cell edges keep separate traces on the same column grid.
+            x=[column - .5, column + .5], y=row_labels, z=[[value / scale] for value in values],
+            coloraxis="coloraxis2" if signed else "coloraxis",
+            text=text, texttemplate="%{text}", textfont=dict(size=11),
+            customdata=details, xgap=3, ygap=3,
+            hovertemplate=("<b>%{customdata[0]}</b><br>Rank: %{customdata[4]}"
+                           "<br>Class: %{customdata[1]}<br>%{customdata[5]}: %{customdata[2]:.4g} %{customdata[3]}<extra></extra>"),
+        ))
+    figure.update_layout(
+        height=max(300, 140 + 42 * len(rows)), margin=dict(l=10, r=100, t=75, b=15),
+        xaxis=dict(type="linear", range=[-.5, len(metrics) - .5], side="top", tickangle=0,
+                   fixedrange=True, tickmode="array", tickvals=list(range(len(metrics))),
+                   ticktext=[metric[1] for metric in metrics], tickfont=dict(size=11),
+                   showgrid=False, zeroline=False),
+        yaxis=dict(autorange="reversed", fixedrange=True, automargin=True, showgrid=False),
+        coloraxis=dict(cmin=0, cmax=1, colorscale=[[0, "#f0f6f2"], [1, "#286553"]],
+                       colorbar=dict(title="Magnitude", tickvals=[0, 1], ticktext=["0", "Max"],
+                                     len=.45, y=.76, thickness=12)),
+        coloraxis2=dict(cmin=-1, cmax=1,
+                        colorscale=[[0, "#a7643b"], [.5, "#f7f8f5"], [1, "#368575"]],
+                        colorbar=dict(title="Stress sign", tickvals=[-1, 0, 1], ticktext=["−Max", "0", "+Max"],
+                                      len=.45, y=.23, thickness=12)),
+    )
+    return figure

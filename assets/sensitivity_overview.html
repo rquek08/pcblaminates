@@ -49,7 +49,6 @@
     .guide[data-stage="concentration"] .stage-concentration .stage-halo,
     .guide[data-stage="swelling"] .stage-swelling .stage-halo { opacity: .06; }
     .water-dot { fill: #368575; animation: absorb 3.8s ease-in-out infinite; }
-    .water-dot.bottom { animation-name: absorb-bottom; }
     .water-dot.offset { animation-delay: -.9s; }
     .water-dot.late { animation-delay: -1.8s; }
     .water-fill { animation: water-pulse 3.8s ease-in-out infinite; }
@@ -78,7 +77,6 @@
     .factor-description { margin: 0; color: #53685e; font-size: 11px; line-height: 1.55; }
     .paused .scene * { animation-play-state: paused !important; }
     @keyframes absorb { 0%, 12% { transform: translateY(-16px); opacity: 0; } 40% { opacity: .9; } 85%, 100% { transform: translateY(25px); opacity: 0; } }
-    @keyframes absorb-bottom { 0%, 12% { transform: translateY(16px); opacity: 0; } 40% { opacity: .9; } 85%, 100% { transform: translateY(-25px); opacity: 0; } }
     @keyframes water-pulse { 0%, 100% { opacity: .18; } 55% { opacity: .75; } }
     @keyframes swell { 0%, 100% { transform: scaleX(1); } 55% { transform: scaleX(1.18); } }
     @keyframes warm-laminate { 0%, 100% { transform: scaleX(1); } 55% { transform: scaleX(1.12); } }
@@ -121,7 +119,7 @@
         <div>
           <svg class="scene" viewBox="0 0 520 158" role="img" aria-labelledby="moisture-title moisture-desc">
             <title id="moisture-title">The moisture pathway</title>
-            <desc id="moisture-desc">Moisture enters both faces of the sheet, adds absorbed water, and causes free in-plane swelling. The selected factor highlights its stage.</desc>
+            <desc id="moisture-desc">Moisture enters one exposed face of the laminate; the opposite face is blocked by copper foil. Absorbed water causes free in-plane swelling. The selected factor highlights its stage.</desc>
             <g class="stage stage-uptake">
               <rect class="stage-halo" x="4" y="12" width="148" height="133" rx="16"/>
               <rect x="32" y="57" width="92" height="46" rx="5" fill="#dce9df" stroke="#91ad9b"/>
@@ -129,9 +127,8 @@
               <circle class="water-dot" cx="52" cy="45" r="4"/>
               <circle class="water-dot offset" cx="79" cy="45" r="4"/>
               <circle class="water-dot late" cx="106" cy="45" r="4"/>
-              <circle class="water-dot bottom offset" cx="52" cy="116" r="4"/>
-              <circle class="water-dot bottom late" cx="79" cy="116" r="4"/>
-              <circle class="water-dot bottom" cx="106" cy="116" r="4"/>
+              <rect x="32" y="103" width="92" height="7" rx="2" fill="#d69b72"/>
+              <text x="78" y="124" text-anchor="middle">Copper foil</text>
               <text class="stage-label" x="78" y="140" text-anchor="middle">Moisture enters</text>
             </g>
             <path class="arrow" d="M154 80h23m-5-5 5 5-5 5"/>

@@ -11,6 +11,8 @@ import numpy as np
 import pandas as pd
 from scipy.stats import qmc
 
+MODEL_VERSION = "one-sided-diffusion-v1"
+
 PARAMETERS = {
     "alpha_lam": ("Laminate CTE", "ppm/K", 8.0, 23.0, "uniform"),
     "beta": ("Moisture expansion (CHE)", "m³/kg", 1.15e-4, 3.8e-4, "uniform"),
@@ -84,9 +86,11 @@ def validate_baseline(p):
 
 
 def evaluate_samples(p, diffusion):
-    """Vectorized dry plane-sheet model; E in MPa, alpha in ppm/K.
+    """Vectorized one-sided dry plane-sheet model; E in MPa, alpha in ppm/K.
 
-    The 60-term notebook series is used at Fo >= .005. Its short-time
+    The laminate thickness is h, with constant surface concentration at the
+    exposed face and zero flux at the copper interface. Use Fo = Dt/(2h)².
+    A 60-term Fickian series is used at Fo >= .005. Its short-time
     asymptote below that avoids a truncation offset near t=0 or D=0.
     """
     validate_baseline(p)
@@ -106,7 +110,7 @@ def evaluate_samples(p, diffusion):
         D, np.asarray(p["h_mm"]) / 1000, np.asarray(p["t_hours"]) * 3600,
         p["Csat"], p["beta"], p["alpha_lam"], p["alpha_cu"], p["delta_T"], p["E"], p["nu"])
     shape = d.shape
-    fo = (d * t / h**2).ravel()
+    fo = (d * t / (2 * h)**2).ravel()
     uptake = np.zeros_like(fo)
     short = (fo > 0) & (fo < 0.005)
     uptake[short] = 4 * np.sqrt(fo[short] / np.pi)
@@ -264,6 +268,7 @@ def excel_report(result, config):
         "Intervals are paired bootstrap 95% percentiles (500 resamples), not material or model validation uncertainty.",
         "Output summary uses A and B base samples only. Samples includes all Saltelli cross-sampling blocks.",
         "Inputs use app engineering units. E is MPa, CTE ppm/K, time h, thickness mm; all samples start dry.",
+        "One exposed face, constant surface concentration, and zero flux at the copper interface: Fo = Dt/(2h)².",
         "Arrhenius: D = D0 exp[-Ea/(8.314 T)], T = T_ref_C + 273.15 + delta_T.",
         "Independent input distributions and bounds determine the rankings. No interface failure is predicted.",
     ]})

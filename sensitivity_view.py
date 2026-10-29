@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from sensitivity_analysis import (
-    EXPOSURE, FIXED_META, MATERIAL, OUTPUTS as RESPONSE_OPTIONS, PARAMETERS, STUDIES,
+    EXPOSURE, FIXED_META, MATERIAL, MODEL_VERSION, OUTPUTS as RESPONSE_OPTIONS, PARAMETERS, STUDIES,
     default_ranges, excel_report, material_ranges, run_analysis,
 )
 from typography import document_fonts
@@ -183,7 +183,8 @@ def render_sensitivity_controls(records):
     input_values = st.session_state.setdefault("sensitivity_input_values", {})
     range_scope = json.dumps(dict(study=study, basis=range_mode, percent=percent, factor=factor), sort_keys=True)
     baselines, ranges = {}, {}
-    material_tabs = st.tabs(names) if len(names) > 1 else [st.container()]
+    range_tables = st.expander("Parameter ranges table", expanded=False)
+    material_tabs = range_tables.tabs(names) if len(names) > 1 else [range_tables]
     for name, tab in zip(names, material_tabs):
         with tab:
             values = custom_values if name == custom else presets[name]["properties"]
@@ -225,7 +226,7 @@ def render_sensitivity_controls(records):
                     baseline_source="Material preset" if name != custom else "Manual inputs",
                     baseline=baselines[name], range_basis=range_mode, ranges=ranges[name].to_dict("records"),
                     diffusion=diffusion, target=target, method="Sobol", N=SAMPLE_SIZE,
-                    seed=SAMPLING_SEED, bootstrap_resamples=500) for name in names]
+                    seed=SAMPLING_SEED, bootstrap_resamples=500, model_version=MODEL_VERSION) for name in names]
     return configs, submitted
 
 
@@ -346,7 +347,8 @@ def render_results(result, config, signature):
         st.markdown("#### Model and method")
         st.latex(r"\sigma_{\mathrm{index}}=\frac{E}{1-\nu}\left[\beta W_t+(\alpha_{\mathrm{lam}}-\alpha_{\mathrm{Cu}})\Delta T\right]")
         st.write("The stress index retains the sign of the combined moisture and thermal contributions. Uptake starts dry and uses "
-                 "one-dimensional plane-sheet diffusion with both faces exposed. Moisture uptake is calculated "
+                 "one-dimensional plane-sheet diffusion through one exposed face, with zero flux at the copper interface. "
+                 "The laminate thickness is h and the diffusion term uses (2h)². Moisture uptake is calculated "
                  "from diffusivity, time, and thickness; Csat sets equilibrium concentration.")
         st.write("A 60-term Fickian series is used with a short-time approximation near zero uptake. "
                  "Saturation concentration and expansion coefficients remain constant with temperature. "

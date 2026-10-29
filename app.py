@@ -40,17 +40,18 @@ def compute_fickian_uptake(
         number_of_series_terms: number of terms in the diffusion series.
 
     Assumes an initially dry homogeneous sheet, constant diffusivity, and
-    constant moisture concentration at both exposed faces.
+    constant moisture concentration at the exposed face, and zero moisture
+    flux at the opposite face interfacing with copper foil.
 
     The diffusion Fourier number is diffusivity multiplied by exposure time,
-    divided by full thickness squared. For values below 0.005, use the
+    divided by (2h)², where h is the laminate thickness. Below 0.005, use the
     short-time approximation; otherwise use the odd-term sheet series.
     """
     exposure_times_seconds = np.asarray(exposure_time_seconds, dtype=float)
     diffusion_fourier_number = (
         moisture_diffusivity
         * np.maximum(exposure_times_seconds, 0.0)
-        / (2*laminate_thickness_meters)**2
+        / (2 * laminate_thickness_meters)**2
     )
     moisture_uptake_fraction = np.zeros_like(diffusion_fourier_number)
     # Avoid a truncated-series offset near zero exposure time or diffusivity.
@@ -273,7 +274,7 @@ def render_moisture_uptake(
     st.plotly_chart(figure, width="stretch", key="moisture_uptake_chart")
     st.caption(f"Selected soak time: {exposure_time_hours:g} h · {current_moisture_uptake_fraction:.2%} of equilibrium uptake. "
                "100% means this material's own equilibrium capacity, not a mass percentage of water.")
-    st.caption("Prediction for an initially dry, homogeneous sheet exposed on both faces, using the current "
+    st.caption("Prediction for an initially dry, homogeneous laminate with one exposed face and an impermeable copper interface, using the current "
                "diffusivity and thickness. Diffusivity stays fixed throughout the curve; "
                "Change in Temperature affects thermal strain only.")
     if end_days > window_days:
