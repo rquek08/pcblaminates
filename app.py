@@ -642,13 +642,13 @@ def render_home_stress_flow():
         st.caption("The two contributions can reinforce or offset each other, depending on the direction of the thermal mismatch.")
 
     with st.expander("Moisture uptake model"), st.container(border=False, key="home_uptake_model"):
-        st.write("For one-dimensional diffusion through a plane sheet of thickness h, "
+        st.write("For one-dimensional diffusion through a plane sheet of effective thickness 2h, "
                  "Fick's second law gives the fractional moisture uptake used in the swelling path.")
         render_symbol_equation(r"\frac{\partial [[C]]}{\partial [[t]]} = [[D]]\frac{\partial^2 [[C]]}{\partial [[z]]^2}")
         render_symbol_equation(
             r"[[uptake]] = 1-\frac{8}{\pi^2}"
             r"\sum_{[[n]]=0}^{\infty}\frac{1}{(2[[n]]+1)^2}"
-            r"\exp\!\left[-\frac{(2[[n]]+1)^2\pi^2 [[D]] [[t]]}{[[h]]^2}\right]"
+            r"\exp\!\left[-\frac{(2[[n]]+1)^2\pi^2 [[D]] [[t]]}{(2[[h]])^2}\right]"
         )
         st.caption("The plane-sheet solution assumes an initially dry laminate, "
                    "constant diffusivity and constant surface moisture concentration.")
