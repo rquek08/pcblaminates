@@ -173,6 +173,7 @@ def render_recommendations(result, config, digest, signature):
     if candidates.empty:
         st.info("No materials meet these conditions and requirements. Review the filters or choose another library.")
         return
+    st.subheader("Recommended Materials")
     application = config["application"]
     st.caption(f"Ranked by {OBJECTIVES[config['objective']][0].lower()} · {config['condition']} · "
                f"ΔT {application['delta_T']:+g} K · soak {application['t_hours']:g} h · thickness {application['h_mm']:g} mm · "
@@ -186,13 +187,12 @@ def render_recommendations(result, config, digest, signature):
            for key in ("sigma_abs", "sigma_index", "sigma_hygro", "sigma_thermal", "W_t")},
         "Hygroscopic strain": st.column_config.NumberColumn(format="%.3e"),
     })
-    with st.expander("Compare recommended materials"):
-        st.caption("Compare the same shortlist in ranking order. Each column has its own scale: "
-                   "darker green means a larger nonnegative value; signed stresses use orange for negative "
-                   "and green for positive values. Hover over a cell for its value and units.")
-        st.plotly_chart(recommendation_heatmap(candidates), width="stretch", key="inverse_shortlist_heatmap")
-        st.caption("A small net stress index can result from moisture and thermal contributions cancelling. "
-                   "Colours show relative values, not material suitability or safety.")
+    st.caption("Compare the same shortlist in ranking order. Each column has its own scale: "
+               "darker green means a larger nonnegative value; signed stresses use orange for negative "
+               "and green for positive values. Hover over a cell for its value and units.")
+    st.plotly_chart(recommendation_heatmap(candidates), width="stretch", key="inverse_shortlist_heatmap")
+    st.caption("A small net stress index can result from moisture and thermal contributions cancelling. "
+               "Colours show relative values, not material suitability or safety.")
     with st.expander("Inspect a recommended material"):
         # The signature gives changing result sets their own inspection state.
         selected = st.selectbox("Recommended material", candidates.index.tolist(),
@@ -210,12 +210,8 @@ def render_recommendations(result, config, digest, signature):
         swelling.metric("Hygroscopic strain", f"{row['eps_h']:.3e}")
         st.dataframe(pd.DataFrame([dict(Property=PARAMETERS[key][0], Value=row[key], Unit=PARAMETERS[key][1])
                                    for key in MATERIAL]), hide_index=True, width="stretch")
-    results_col, settings_col = st.columns(2)
-    results_col.download_button("Download recommendations (CSV)", candidates.to_csv(index=False).encode(),
-                                "recommended_materials.csv", "text/csv", key="inverse_shortlist_download")
-    settings_col.download_button("Download application settings (JSON)",
-                                 json.dumps(dict(library_digest=digest, **config), indent=2).encode(),
-                                 "recommendation_settings.json", "application/json", key="inverse_settings_download")
+    st.download_button("Download recommendations (CSV)", candidates.to_csv(index=False).encode(),
+                       "recommended_materials.csv", "text/csv", key="inverse_shortlist_download")
 
 
 def recommendation_heatmap(candidates):

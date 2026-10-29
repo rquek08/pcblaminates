@@ -72,7 +72,7 @@ class RecommendationHeatmapTests(unittest.TestCase):
         app.number_input(key="inverse_result_count").set_value(3)
         app.button(key="inverse_recommend").click().run()
         self.assertFalse(app.exception)
-        self.assertIn("Compare recommended materials", [item.label for item in app.expander])
+        self.assertIn("Recommended Materials", [item.value for item in app.subheader])
         stored = app.session_state["inverse_recommendation"]
         candidates = stored["result"]["candidates"]
         self.assertEqual(len(candidates), 3)
