@@ -50,7 +50,7 @@ def compute_fickian_uptake(
     diffusion_fourier_number = (
         moisture_diffusivity
         * np.maximum(exposure_times_seconds, 0.0)
-        / laminate_thickness_meters**2
+        / (2*laminate_thickness_meters)**2
     )
     moisture_uptake_fraction = np.zeros_like(diffusion_fourier_number)
     # Avoid a truncated-series offset near zero exposure time or diffusivity.
