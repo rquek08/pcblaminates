@@ -1,5 +1,9 @@
 [theme]
-primaryColor = "#368575"
+base = "dark"
+primaryColor = "#8acdb8"
+backgroundColor = "#10272e"
+secondaryBackgroundColor = "#1b353c"
+textColor = "#e6f2ec"
 font = "DM Sans, sans-serif"
 headingFont = "DM Serif Display, serif"
 headingFontWeights = 400

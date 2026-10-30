@@ -27,17 +27,24 @@ def font_css():
 
 
 def document_fonts(html):
-    return html.replace(FONT_LINK, "<style>" + font_css() + "</style>")
+    html = html.replace(FONT_LINK, "<style>" + font_css() + "</style>")
+    theme = (Path(__file__).parent / "assets" / "frame_theme.css").read_text(encoding="utf-8")
+    return html.replace("</head>", "<style>" + theme + "</style></head>")
 
 
 def configure_charts():
     """Body labels and monospace values, including canvas-rendered Plotly text."""
-    axis = dict(tickfont=dict(family=NUMBER_FONT), title=dict(font=dict(family=BODY_FONT)))
+    axis = dict(tickfont=dict(family=NUMBER_FONT, color="#c2d8d1"),
+                title=dict(font=dict(family=BODY_FONT, color="#c2d8d1")),
+                gridcolor="rgba(214,239,229,.09)", zerolinecolor="rgba(214,239,229,.22)")
     pio.templates["pcb_typography"] = go.layout.Template(
-        layout=dict(font=dict(family=BODY_FONT), title=dict(font=dict(family=HEADING_FONT)),
+        layout=dict(font=dict(family=BODY_FONT, color="#e6f2ec"),
+                    title=dict(font=dict(family=HEADING_FONT)),
+                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                     xaxis=axis, yaxis=axis,
-                    hoverlabel=dict(font=dict(family=NUMBER_FONT)),
-                    scene=dict(xaxis=axis, yaxis=axis, zaxis=axis)),
+                    hoverlabel=dict(bgcolor="#24434a", bordercolor="#658b82",
+                                    font=dict(family=NUMBER_FONT, color="#e6f2ec")),
+                    scene=dict(xaxis=axis, yaxis=axis, zaxis=axis, bgcolor="rgba(0,0,0,0)")),
         data=dict(bar=[go.Bar(textfont=dict(family=NUMBER_FONT))]),
     )
-    pio.templates.default = "plotly+pcb_typography"
+    pio.templates.default = "plotly_dark+pcb_typography"

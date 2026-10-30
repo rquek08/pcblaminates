@@ -1,0 +1,30 @@
+<script>
+(() => {
+  window.pcbCompactToolbar?.disconnect();
+  function addDeploymentItem() {
+    const menu = document.querySelector('[data-testid="stMainMenuList"]');
+    const deploy = document.querySelector('[data-testid="stAppDeployButton"] button');
+    if (!menu || !deploy || menu.querySelector('[data-pcb-deploy]')) return;
+    const existing = menu.querySelector('button[role="menuitem"]');
+    if (!existing) return;
+    // Retain Streamlit's own deployment action behind the existing more menu.
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = existing.className;
+    item.setAttribute('role', 'menuitem');
+    item.setAttribute('data-pcb-deploy', '');
+    item.textContent = 'Deploy';
+    item.tabIndex = 0;
+    item.addEventListener('click', event => {
+      event.preventDefault();
+      document.querySelector('[data-testid="stMainMenuButton"]')?.click();
+      deploy.click();
+    });
+    menu.appendChild(item);
+  }
+  const observer = new MutationObserver(addDeploymentItem);
+  observer.observe(document.body, {childList: true, subtree: true});
+  window.pcbCompactToolbar = observer;
+  addDeploymentItem();
+})();
+</script>
