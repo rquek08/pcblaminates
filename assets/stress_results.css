@@ -1,0 +1,41 @@
+[class*="st-key-stress_results_"] [data-testid="stColumn"] {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1rem;
+  box-shadow: 0 5px 18px rgba(3, 17, 21, .12), inset 0 1px rgba(255, 255, 255, .035);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+[class*="st-key-stress_results_"] [data-testid="stColumn"]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+}
+[class*="st-key-stress_results_"] [data-testid="stColumn"]:has([class*="st-key-result_saturation_"]),
+[class*="st-key-stress_results_"] [data-testid="stColumn"]:has([class*="st-key-result_hygroscopic_"]) {
+  background: linear-gradient(135deg, rgba(138, 205, 184, .09), rgba(222, 244, 235, .025));
+}
+[class*="st-key-stress_results_"] [data-testid="stColumn"]:has([class*="st-key-result_saturation_"])::before,
+[class*="st-key-stress_results_"] [data-testid="stColumn"]:has([class*="st-key-result_hygroscopic_"])::before {
+  background: #8acdb8;
+}
+[class*="st-key-result_saturation_"] [data-testid="stMetricValue"],
+[class*="st-key-result_hygroscopic_"] [data-testid="stMetricValue"] {
+  color: #9ed9c4;
+}
+[class*="st-key-stress_results_"] [data-testid="stColumn"]:has([class*="st-key-result_thermal_"]) {
+  background: linear-gradient(135deg, rgba(227, 172, 136, .09), rgba(222, 244, 235, .025));
+}
+[class*="st-key-stress_results_"] [data-testid="stColumn"]:has([class*="st-key-result_thermal_"])::before {
+  background: #e3ac88;
+}
+[class*="st-key-result_thermal_"] [data-testid="stMetricValue"] { color: #e3ac88; }
+[class*="st-key-stress_results_"] [data-testid="stColumn"]:has([class*="st-key-result_net_"]) {
+  background: linear-gradient(120deg, rgba(138, 205, 184, .09), rgba(227, 172, 136, .08));
+}
+[class*="st-key-stress_results_"] [data-testid="stColumn"]:has([class*="st-key-result_net_"])::before {
+  background: linear-gradient(90deg, #8acdb8, #e3ac88);
+}

@@ -1,5 +1,5 @@
 .equation-symbol-hint {
-  color: #2f7866;
+  color: #9ed9c4;
   cursor: pointer;
   border-radius: 3px;
   transition: background .15s;
@@ -18,11 +18,13 @@
   max-height: calc(100vh - 24px);
   overflow: auto;
   padding: 18px 20px;
-  border: 1px solid #cddfd6;
-  border-top: 4px solid #368575;
+  border: 1px solid rgba(211, 237, 226, .2);
+  border-top: 3px solid #8acdb8;
   border-radius: 12px;
-  background: var(--background-color, #fff);
-  color: var(--text-color, #243e38);
+  background: rgba(26, 52, 59, .96);
+  color: #e6f2ec;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   box-shadow: 0 10px 32px rgba(28, 57, 45, .18), 0 2px 6px rgba(28, 57, 45, .08);
   font-family: var(--pcb-body-font, "DM Sans", sans-serif);
   font-size: 14px;
@@ -32,7 +34,7 @@
 .pcb-equation-card[hidden] { display: none; }
 .pcb-equation-card__eyebrow {
   margin: 0 0 8px;
-  color: #568574;
+  color: #9ed9c4;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: .12em;
@@ -45,9 +47,9 @@
   align-items: baseline;
   gap: 10px;
   padding-top: 12px;
-  border-top: 1px solid #e3ece6;
+  border-top: 1px solid rgba(211, 237, 226, .14);
 }
-.pcb-equation-card__units-label { color: #60756d; font-size: 12px; }
+.pcb-equation-card__units-label { color: #b6cec6; font-size: 12px; }
 .pcb-equation-card__units-value {
   font-family: var(--pcb-number-font, "JetBrains Mono", monospace);
   padding: 2px 8px;

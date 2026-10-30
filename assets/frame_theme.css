@@ -1,0 +1,72 @@
+/* Shared dark glass treatment for the app's isolated animation documents. */
+:root { color-scheme: dark; }
+html, body { color: #e6f2ec; background: #10272e; }
+.guide, .viewer {
+  color: #e6f2ec;
+  border: 1px solid rgba(211, 237, 226, .14);
+  background: linear-gradient(135deg, rgba(222, 244, 235, .055), rgba(222, 244, 235, .02));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: inset 0 1px rgba(255, 255, 255, .03);
+}
+.guide { --accent: #8acdb8; border: 0; box-shadow: none; }
+.sensitivity-overview-document, .sensitivity-overview-document body {
+  color-scheme: normal;
+  background: transparent;
+}
+.sensitivity-overview-document .guide {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.home-laminate-document .viewer { height: 100vh; min-height: 0; display: flex; flex-direction: column; }
+.home-laminate-document .scene { flex: 1; min-height: 180px; }
+.home-laminate-document #status { min-height: 0; margin-bottom: 0; }
+.pcb-structure-document, .pcb-structure-document body {
+  color-scheme: normal;
+  background: transparent;
+}
+.pcb-structure-document .viewer {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.pcb-structure-document.is-compact .viewer { padding: 0; height: 100vh; display: flex; flex-direction: column; }
+.pcb-structure-document.is-compact .viewer > :not(.stage) { display: none; }
+.pcb-structure-document.is-compact .viewer > .controls {
+  display: flex; align-items: center; flex-shrink: 0; margin: 0 0 8px;
+}
+.pcb-structure-document.is-compact .stage { flex: 1; min-height: 0; aspect-ratio: auto; margin: 0; }
+.pcb-structure-document .detail-back {
+  color: #d9eee3; background: rgba(26, 52, 59, .95); border-color: rgba(211, 237, 226, .22);
+}
+.pathway.thermal { --accent: #e3ac88; }
+.pathway.stress { --accent: #c7d1a6; }
+.intro, .note, .path-copy, .factor-description, .status, .material { color: #b6cec6; }
+.pathway + .pathway { border-color: rgba(211, 237, 226, .13); }
+.factor {
+  color: #e6f2ec; background: rgba(222, 244, 235, .035);
+  border-color: rgba(211, 237, 226, .14);
+}
+.factor[data-highlighted="true"] { background: rgba(138, 205, 184, .09); }
+.guide .scene text { fill: #b6cec6; }
+.guide .scene .stage-label { fill: #e6f2ec; }
+.guide .scene .block-label { fill: #26463f; }
+.guide .scene .arrow { stroke: #95b6a9; }
+.guide .water-dot { fill: #8acdb8; }
+.motion-control, .controls button {
+  color: #d9eee3; background: rgba(222, 244, 235, .06);
+  border-color: rgba(211, 237, 226, .22);
+}
+.motion-control:hover, .controls button:hover { background: rgba(222, 244, 235, .1); }
+.controls button[aria-pressed="true"] {
+  background: rgba(138, 205, 184, .2); color: #edf8f0; border-color: rgba(138, 205, 184, .4);
+}
+.controls #reset { color: #c2d8d1; }
+.diagram-heading, .bond-caption { fill: #b6cec6; }
+.eyebrow { color: #9bc9bb; }
+.chip { background: rgba(222, 244, 235, .025); border-color: rgba(211, 237, 226, .18); }
+button:focus-visible { outline-color: #8acdb8; }
