@@ -11,7 +11,7 @@ OBJECTIVES = {
     "eps_h": ("Lowest hygroscopic swelling", "dimensionless"),
     "W_t": ("Lowest absorbed water concentration", "kg/m³"),
 }
-RESULT_OUTPUTS = ["sigma_abs", "sigma_index", "sigma_hygro", "sigma_thermal", "Mt_Minf", "eps_h", "W_t"]
+RESULT_OUTPUTS = ["sigma_abs", "sigma_index", "sigma_hygro", "sigma_thermal", "Mt_Minf", "eps_h", "eps_t", "W_t"]
 
 
 def records_from_csv(frame):

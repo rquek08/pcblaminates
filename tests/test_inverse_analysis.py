@@ -94,7 +94,7 @@ class MaterialRecommenderTests(unittest.TestCase):
             original = next(r for r in self.records if r["name"] == row["name"])
             expected = evaluate_samples(dict(self.application, **{key: original["properties"][key] for key in MATERIAL}),
                                         {"mode": "Fixed D"})
-            for key in ("sigma_abs", "sigma_index", "sigma_hygro", "sigma_thermal", "eps_h", "W_t"):
+            for key in ("sigma_abs", "sigma_index", "sigma_hygro", "sigma_thermal", "eps_h", "eps_t", "W_t"):
                 self.assertAlmostEqual(row[key], float(expected[key]))
             for key, value in self.application.items():
                 self.assertEqual(row[key], value)
