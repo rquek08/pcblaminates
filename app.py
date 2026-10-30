@@ -185,6 +185,7 @@ LEGACY_PRESET_NAMES = {
 # Load the exploration modules from this app's folder, including when older
 # copies from the parent folder are already in Python's module cache.
 for module_name, filename in (("typography", "typography.py"),
+                              ("stress_results", "stress_results.py"),
                               ("sensitivity_analysis", "sensitivity_analysis.py"),
                               ("_pcb_sensitivity_view", "sensitivity_view.py"),
                               ("inverse_analysis", "inverse_analysis.py"),
@@ -199,6 +200,7 @@ render_sensitivity = sys.modules["_pcb_sensitivity_view"].render_sensitivity
 render_inverse = sys.modules["_pcb_inverse_view"].render_inverse
 render_stack = sys.modules["_pcb_stack_view"].render_stack
 typography = sys.modules["typography"]
+stress_results = sys.modules["stress_results"]
 
 
 # -----------------------------------------------------------------------------
@@ -241,10 +243,16 @@ def render_moisture_uptake(
     laminate_thickness_meters,
     exposure_time_hours,
     current_moisture_uptake_fraction,
+    *, height=370, compact=False,
 ):
-    st.subheader("Moisture Uptake Over Time")
-    window_days = st.radio("Time window (days)", [30, 120, 365], horizontal=True,
-                           key="uptake_window_days")
+    if compact:
+        window_days = st.segmented_control("Time window (days)", [30, 120, 365], default=30, required=True,
+                                           format_func=lambda days: f"{days} days", key="uptake_window_days",
+                                           label_visibility="collapsed")
+    else:
+        st.subheader("Moisture Uptake Over Time")
+        window_days = st.radio("Time window (days)", [30, 120, 365], horizontal=True,
+                               key="uptake_window_days")
     soak_days = exposure_time_hours / 24.0
     end_days = max(float(window_days), soak_days * 1.1)
     # Sample early times more densely, and include the exact selected soak time.
@@ -266,46 +274,24 @@ def render_moisture_uptake(
         hovertemplate=f"Soak time: {exposure_time_hours:g} h<br>Equilibrium uptake: %{{y:.2%}}<extra></extra>",
     ))
     figure.update_layout(
-        height=370, margin=dict(l=10, r=10, t=15, b=10),
+        height=height, margin=dict(l=10, r=10, t=15, b=10),
         xaxis=dict(title="Exposure time (days)", range=[0, end_days]),
-        yaxis=dict(title="Fractional moisture uptake (Mt/M∞)", range=[0, 1.05], tickformat=".0%"),
+        yaxis=dict(title="Moisture uptake (%)" if compact else "Fractional moisture uptake (Mt/M∞)",
+                   range=[0, 1.05], tickformat=".0%"),
         legend=dict(orientation="h", y=1.02, yanchor="bottom", x=0),
     )
     st.plotly_chart(figure, width="stretch", key="moisture_uptake_chart")
-    st.caption(f"Selected soak time: {exposure_time_hours:g} h · {current_moisture_uptake_fraction:.2%} of equilibrium uptake. "
-               "100% means this material's own equilibrium capacity, not a mass percentage of water.")
-    st.caption("Prediction for an initially dry, homogeneous laminate with one exposed face and an impermeable copper interface, using the current "
-               "diffusivity and thickness. Diffusivity stays fixed throughout the curve; "
-               "Change in Temperature affects thermal strain only.")
+    if compact:
+        st.caption(f"Selected soak: {exposure_time_hours:g} h · {current_moisture_uptake_fraction:.2%} of equilibrium uptake. "
+                   "One exposed face; impermeable copper interface. Diffusivity stays fixed.")
+    else:
+        st.caption(f"Selected soak time: {exposure_time_hours:g} h · {current_moisture_uptake_fraction:.2%} of equilibrium uptake. "
+                   "100% means this material's own equilibrium capacity, not a mass percentage of water.")
+        st.caption("Prediction for an initially dry, homogeneous laminate with one exposed face and an impermeable copper interface, using the current "
+                   "diffusivity and thickness. Diffusivity stays fixed throughout the curve; "
+                   "Change in Temperature affects thermal strain only.")
     if end_days > window_days:
         st.caption("The time window has been extended to include the selected soak time.")
-
-
-def interpret_stress_contributions(hygroscopic, thermal):
-    """Describe signed contributions using their magnitudes to determine dominance."""
-    if hygroscopic == 0 and thermal == 0:
-        return "Neither contribution is active", "Both contributions are zero, so the net stress index is zero."
-    if hygroscopic == 0:
-        return "Thermal contribution dominates", "There is no hygroscopic contribution at these inputs. The net stress index equals the thermal contribution."
-    if thermal == 0:
-        return "Hygroscopic contribution dominates", "There is no thermal mismatch contribution at these inputs. The net stress index equals the hygroscopic contribution."
-
-    balanced = np.isclose(abs(hygroscopic), abs(thermal), rtol=1e-6, atol=1e-12)
-    opposing = np.sign(hygroscopic) != np.sign(thermal)
-    if balanced:
-        headline = "Contributions have equal magnitude"
-        effect = ("The contributions have opposite signs and nearly cancel, giving a near-zero net stress index."
-                  if opposing else
-                  "The contributions have the same sign and reinforce each other, increasing the magnitude of the net stress index.")
-    else:
-        dominant = "Hygroscopic" if abs(hygroscopic) > abs(thermal) else "Thermal"
-        smaller = "Thermal mismatch" if dominant == "Hygroscopic" else "Moisture swelling"
-        headline = f"{dominant} contribution dominates"
-        effect = (f"The contributions have opposite signs. {smaller} offsets part of the larger contribution, "
-                  "reducing the magnitude of the net stress index. The net index keeps the sign of the larger contribution."
-                  if opposing else
-                  "The contributions have the same sign and reinforce each other, increasing the magnitude of the net stress index.")
-    return headline, effect
 
 
 def render_3d_deformation(
@@ -415,11 +401,16 @@ def render_3d_deformation(
 # -----------------------------------------------------------------------------
 # 6. USER INTERFACE: NAVIGATION, STYLING, AND PAGE LAYOUTS
 # -----------------------------------------------------------------------------
+HOME_PAGE = "Home"
 NAVIGATION = ["Stress Analyser", "Sensitivity Analysis", "Inverse Exploration"]
 
 
 def navigate(section=None):
-    st.session_state["main_navigation"] = section
+    st.session_state["main_navigation"] = section or HOME_PAGE
+    request_navigation_scroll()
+
+
+def request_navigation_scroll():
     st.session_state["scroll_to_top"] = True
 
 
@@ -441,123 +432,9 @@ def scroll_to_top_after_navigation():
 
 def render_style():
     typography.configure_charts()
-    st.markdown("<style>" + typography.font_css() + "</style>", unsafe_allow_html=True)
-    st.markdown("""
-    <style>
-    .stApp, .stApp input, .stApp textarea, .stApp button, .stApp select {
-        font-family: var(--pcb-body-font); }
-    .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6,
-    .st-key-home_link button p {
-        font-family: var(--pcb-heading-font) !important; font-weight: 400 !important; }
-    .stApp h2 { font-size: 2rem !important; line-height: 1.25 !important; }
-    .stApp h3 { font-size: 1.5rem !important; line-height: 1.3 !important; }
-    .stApp h4 { font-size: 1.1rem !important; line-height: 1.35 !important; }
-    [data-testid="stNumberInput"] input,
-    [data-testid="stMetricValue"], [data-testid="stMetricValue"] *,
-    [data-testid="stMetricDelta"], [data-testid="stSliderTickBar"],
-    .stApp code, .stApp pre {
-        font-family: var(--pcb-number-font) !important;
-        font-variant-numeric: tabular-nums; }
-    [data-baseweb="select"], [data-baseweb="select"] *,
-    [role="listbox"], [role="listbox"] * {
-        font-family: var(--pcb-number-font) !important; }
-    /* Preserve KaTeX's sized operators and delimiters, while using the
-       serif typeface for equation letters, digits and basic operators. */
-    .katex, .katex .mathnormal, .katex .mathit, .katex .mathrm, .katex .mathtt,
-    .katex .mord:not(.op-symbol), .katex .mrel, .katex .mbin, .katex .mpunct {
-        font-family: "DM Serif Display", KaTeX_Main, serif !important; }
-    .block-container { max-width: 1440px; padding-top: 2rem; padding-bottom: 3rem; }
-    .st-key-home_link button { border: none; background: transparent; padding-left: 0; }
-    .st-key-home_link button p { font-size: 1.15rem; font-weight: 700; }
-    .st-key-main_navigation button {
-        border: none; border-radius: 0; background: transparent;
-        padding: .7rem .9rem; border-bottom: 2px solid transparent;
-    }
-    .st-key-main_navigation button[aria-pressed="true"] {
-        color: #368575; border-bottom-color: #368575; background: transparent;
-    }
-    .st-key-main_navigation button:hover { background: rgba(54,133,117,.08); }
-    .st-key-main_navigation button:focus-visible { outline: 2px solid #368575; }
-    [data-testid^="stBaseButton-primary"] {
-        background-color: #368575; border-color: #368575; color: #fff; }
-    [data-testid^="stBaseButton-primary"]:hover {
-        background-color: #2b6a5d; border-color: #2b6a5d; color: #fff; }
-    [class*="st-key-sens_"] [data-testid="stBaseButton-secondary"] {
-        background: rgba(54,133,117,.08); border-color: #95bcb0; color: #368575; }
-    [class*="st-key-sens_"] [data-testid="stBaseButton-secondary"]:hover {
-        background: rgba(54,133,117,.16); border-color: #368575; }
-    [class*="st-key-sens_"] button:focus-visible { outline: 2px solid #368575; }
-    .st-key-sens_scope {
-        background: rgba(54,133,117,.08); border-radius: .7rem; padding: .25rem; }
-    .st-key-sens_scope button {
-        border: 1px solid transparent; border-radius: .45rem; padding: .55rem 1rem;
-        color: #368575; background: transparent; transition: background-color .15s ease; }
-    .st-key-sens_scope button:hover { background: rgba(54,133,117,.14); }
-    .st-key-sens_scope button[aria-pressed="true"],
-    .st-key-sens_scope [data-testid="stBaseButton-segmentedControlActive"] {
-        color: #fff; background: #368575; border-color: #368575; }
-    .eyebrow { color: #368575; font-size: .78rem; font-weight: 650; letter-spacing: .16em; }
-    .hero-title { font-size: clamp(2.25rem, 4vw, 3.8rem); line-height: 1.15;
-        text-align: left; font-weight: 700; letter-spacing: -.035em;
-        max-width: 640px; margin: 0 0 1.2rem; text-wrap: balance; }
-    .hero-copy { font-size: 1rem; line-height: 1.75; max-width: 640px; opacity: .85; }
-    [data-testid="stColumn"]:has(.st-key-home_moisture_path) {
-        background: rgba(54,133,117,.045); border-radius: .75rem; }
-    [data-testid="stColumn"]:has(.st-key-home_thermal_path) {
-        background: rgba(200,125,85,.045); border-radius: .75rem; }
-    .st-key-home_combined_index { background: rgba(54,133,117,.07); border-radius: .75rem; }
-    .flow-step { font-size: .75rem; font-weight: 650; letter-spacing: .08em;
-        color: #368575; margin: 0 0 .3rem; }
-    .flow-down { text-align: center; color: #78988e; font-size: 1.5rem; margin: .25rem 0; }
-    .flow-merge { height: 80px; }
-    .flow-merge svg { display: block; width: 100%; height: 80px; }
-    .flow-merge-mobile { display: none; }
-    .exploration-icon { display: flex; align-items: center; justify-content: center;
-        width: 48px; height: 48px; margin-bottom: .5rem; border-radius: 12px;
-        background: rgba(54,133,117,.1); color: #368575; }
-    .exploration-icon svg { width: 28px; height: 28px; }
-    .st-key-stress_analyser_header .exploration-icon,
-    .st-key-sensitivity_analysis_header .exploration-icon,
-    .st-key-inverse_exploration_header .exploration-icon { margin-bottom: 0; }
-    .st-key-stress_analyser_header h1,
-    .st-key-sensitivity_analysis_header h1,
-    .st-key-inverse_exploration_header h1 { padding: 0; }
-    .st-key-simulation_scenario .scenario-section-heading {
-        padding: 0; margin: 1rem 0 .4rem; }
-    .st-key-simulation_scenario .scenario-property-heading {
-        padding: 0; margin: .5rem 0 .4rem; }
-    [data-testid="stMetricValue"] { font-size: 1.8rem; }
-    .st-key-simulation_results [data-testid="stColumn"] {
-        position: relative; overflow: hidden; border-radius: 1rem;
-        box-shadow: 0 3px 12px rgba(35,65,54,.045); }
-    .st-key-simulation_results [data-testid="stColumn"]::before {
-        content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px; }
-    .st-key-simulation_results [data-testid="stColumn"]:has(.st-key-result_saturation),
-    .st-key-simulation_results [data-testid="stColumn"]:has(.st-key-result_hygroscopic) {
-        background: linear-gradient(135deg, rgba(54,133,117,.12), rgba(54,133,117,.035)); }
-    .st-key-simulation_results [data-testid="stColumn"]:has(.st-key-result_saturation)::before,
-    .st-key-simulation_results [data-testid="stColumn"]:has(.st-key-result_hygroscopic)::before {
-        background: #368575; }
-    .st-key-result_saturation [data-testid="stMetricValue"],
-    .st-key-result_hygroscopic [data-testid="stMetricValue"] { color: #368575; }
-    .st-key-simulation_results [data-testid="stColumn"]:has(.st-key-result_thermal) {
-        background: linear-gradient(135deg, rgba(200,125,85,.14), rgba(200,125,85,.035)); }
-    .st-key-simulation_results [data-testid="stColumn"]:has(.st-key-result_thermal)::before {
-        background: #c87d55; }
-    .st-key-result_thermal [data-testid="stMetricValue"] { color: #a56641; }
-    .st-key-simulation_results [data-testid="stColumn"]:has(.st-key-result_net) {
-        background: linear-gradient(120deg, rgba(54,133,117,.12), rgba(200,125,85,.14)); }
-    .st-key-simulation_results [data-testid="stColumn"]:has(.st-key-result_net)::before {
-        background: linear-gradient(90deg, #368575, #c87d55); }
-    @media (max-width: 760px) {
-        .block-container { padding-top: 1rem; }
-        .st-key-main_navigation button { padding: .6rem .5rem; }
-        .flow-merge svg { display: none; }
-        .flow-merge-mobile { display: block; text-align: center; padding: 1.25rem 0;
-            color: #368575; }
-    }
-    </style>
-    """, unsafe_allow_html=True)
+    st.html("<style>" + typography.font_css() + "</style>")
+    st.html(Path(__file__).parent / "assets" / "site_theme.css")
+    st.html(Path(__file__).parent / "assets" / "compact_toolbar.html", unsafe_allow_javascript=True)
 
 
 def render_symbol_equation(equation):
@@ -581,42 +458,108 @@ def render_home_stress_flow():
     st.write(
         "Moisture causes the laminate to swell, while temperature changes produce different degrees of "
         "expansion in the copper and laminate. Bonding restricts this relative movement, "
-        "creating mechanical loading at their interface. The calculation below combines "
-        "the two strain contributions through the laminate's effective in-plane stiffness."
+        "creating mechanical loading at their interface. "
     )
-    st.caption("Hover over or tap on a green symbol to see what it represents and its units.")
     moisture, thermal = st.columns(2, gap="large", border=True)
     with moisture.container(border=False, key="home_moisture_path"):
         with st.container(border=False, key="home_moisture_heading"):
             st.markdown("#### Moisture contribution")
         with st.container(border=False, key="home_moisture_step_1"):
             st.markdown('<p class="flow-step">01 · MOISTURE UPTAKE</p>', unsafe_allow_html=True)
-            st.write("Diffusion sets the moisture absorbed at exposure time t.")
+            st.markdown('<p class="flow-desc">Diffusion sets the moisture absorbed at exposure time t.</p>', unsafe_allow_html=True)
+            st.markdown(
+                """
+                    <style>
+                    .flow-step {
+                    font-size: 0.75rem !important;
+                    font-weight: 600;
+                    letter-spacing: 0.05em;
+                    }
+                    .flow-desc {
+                    font-size: 0.8rem !important;  /* Adjust size as needed */
+                    margin-top: -0.25rem;
+                    margin-bottom: 0.5rem;
+                }
+                </style>
+            """,
+            unsafe_allow_html=True,
+        )
             render_symbol_equation(r"[[Ct]] = [[uptake]]\,[[Csat]], \qquad [[W]] = [[Ct]] [[water_mass]]")
         st.markdown('<p class="flow-down" aria-hidden="true">↓</p>', unsafe_allow_html=True)
         with st.container(border=False, key="home_moisture_step_2"):
-            st.markdown('<p class="flow-step">02 · SWELLING STRAIN</p>', unsafe_allow_html=True)
-            st.write("Absorbed water causes the laminate to expand.")
+            st.markdown('<p class="flow-step" style="font-size: 0.75rem;">02 · SWELLING STRAIN</p>', unsafe_allow_html=True)
+            st.markdown('<p class="flow-desc">Absorbed water causes the laminate to expand.</p>', unsafe_allow_html=True)
+            st.markdown(
+                    """
+                        <style>
+                        .flow-step {
+                        font-size: 0.75rem !important;
+                        font-weight: 600;
+                        letter-spacing: 0.05em;
+                        }
+                        .flow-desc {
+                        font-size: 0.8rem !important;  /* Adjust size as needed */
+                        margin-top: -0.25rem;
+                        margin-bottom: 0.5rem;
+                    }
+                    </style>
+                """,
+                unsafe_allow_html=True,
+            )
             render_symbol_equation(r"[[eps_h]] = [[beta]]\,[[W]]")
         st.markdown('<p class="flow-down" aria-hidden="true">↓</p>', unsafe_allow_html=True)
         with st.container(border=False, key="home_moisture_step_3"):
-            st.markdown('<p class="flow-step">03 · STRESS-INDEX CONTRIBUTION</p>', unsafe_allow_html=True)
+            st.markdown('<p class="flow-step" style="font-size: 0.75rem;">03 · STRESS-INDEX CONTRIBUTION</p>', unsafe_allow_html=True)
             render_symbol_equation(r"[[sigma_h]] = \frac{[[E]]}{1-[[nu]]}\,[[eps_h]]")
     with thermal.container(border=False, key="home_thermal_path"):
         with st.container(border=False, key="home_thermal_heading"):
             st.markdown("#### Thermal contribution")
         with st.container(border=False, key="home_thermal_step_1"):
-            st.markdown('<p class="flow-step">01 · TEMPERATURE CHANGE</p>', unsafe_allow_html=True)
-            st.write("Heating or cooling changes each material's dimensions.")
+            st.markdown('<p class="flow-step" style="font-size: 0.75rem;">01 · TEMPERATURE CHANGE</p>', unsafe_allow_html=True)
+            st.markdown('<p class="flow-desc">Heating or cooling changes each material\'s dimensions.</p>', unsafe_allow_html=True)
+            st.markdown(
+                    """
+                        <style>
+                        .flow-step {
+                        font-size: 0.75rem !important;
+                        font-weight: 600;
+                        letter-spacing: 0.05em;
+                        }
+                        .flow-desc {
+                            font-size: 0.8rem !important;  /* Adjust size as needed */
+                            margin-top: -0.25rem;
+                            margin-bottom: 0.5rem;
+                        }
+                            </style>
+                """,
+                        unsafe_allow_html=True,
+                )
             render_symbol_equation(r"[[delta_T]] = [[T]] - [[Tref]]")
         st.markdown('<p class="flow-down" aria-hidden="true">↓</p>', unsafe_allow_html=True)
         with st.container(border=False, key="home_thermal_step_2"):
-            st.markdown('<p class="flow-step">02 · EXPANSION MISMATCH STRAIN</p>', unsafe_allow_html=True)
-            st.write("Different CTEs create a relative expansion strain.")
+            st.markdown('<p class="flow-step" style="font-size: 0.75rem;">02 · EXPANSION MISMATCH STRAIN</p>', unsafe_allow_html=True)
+            st.markdown('<p class="flow-desc">Different CTEs create a relative expansion strain.</p>', unsafe_allow_html=True)
+            st.markdown(
+                    """
+                        <style>
+                        .flow-step {
+                        font-size: 0.75rem !important;
+                        font-weight: 600;
+                        letter-spacing: 0.05em;
+                        }
+                        .flow-desc {
+                            font-size: 0.8rem !important;  /* Adjust size as needed */
+                            margin-top: -0.25rem;
+                            margin-bottom: 0.5rem;
+                        }
+                            </style>
+                """,
+                        unsafe_allow_html=True,
+                )
             render_symbol_equation(r"[[eps_T]] = ([[alpha_lam]]-[[alpha_cu]])\,[[delta_T]]")
         st.markdown('<p class="flow-down" aria-hidden="true">↓</p>', unsafe_allow_html=True)
         with st.container(border=False, key="home_thermal_step_3"):
-            st.markdown('<p class="flow-step">03 · STRESS-INDEX CONTRIBUTION</p>', unsafe_allow_html=True)
+            st.markdown('<p class="flow-step" style="font-size: 0.75rem;">03 · STRESS-INDEX CONTRIBUTION</p>', unsafe_allow_html=True)
             render_symbol_equation(r"[[sigma_T]] = \frac{[[E]]}{1-[[nu]]}\,[[eps_T]]")
 
     st.markdown('''
@@ -640,12 +583,9 @@ def render_home_stress_flow():
             r"\left([[eps_h]] + [[eps_T]]\right)"
         )
         st.write("A signed measure of the constrained in-plane response for comparing materials and exposure conditions.")
-        st.caption("The two contributions can reinforce or offset each other, depending on the direction of the thermal mismatch.")
-
+        
     with st.expander("Moisture uptake model"), st.container(border=False, key="home_uptake_model"):
-        st.write("The laminate has an effective thickness h. Moisture diffuses through only one exposed face, "
-                 "because the opposite face interfaces with the copper foil and is treated as impermeable. "
-                 "Fick's second law gives the fractional moisture uptake used in the swelling path; "
+        st.write("Fick's second law gives the fractional moisture uptake used in the swelling path; "
                  "the (2h)² term accounts for this one-sided diffusion boundary condition.")
         render_symbol_equation(r"\frac{\partial [[C]]}{\partial [[t]]} = [[D]]\frac{\partial^2 [[C]]}{\partial [[z]]^2}")
         render_symbol_equation(
@@ -683,16 +623,17 @@ def render_exploration_icon(shapes):
 
 def render_home():
     text, illustration = st.columns([1.05, 1], gap="large", vertical_alignment="top")
-    with text:
-        st.markdown(
+    with text.container(key="home_intro", height="stretch"):
+        st.html(
             '<h1 class="hero-title">Hygrothermal Effects on Copper-Laminate Interfaces</h1>',
-            unsafe_allow_html=True,
         )
-        st.markdown(
+        st.html(
             '<p class="hero-copy">In the field of electronics, printed circuit boards (PCBs) '
             'are essential components that connect various electronic parts. One of the most '
             'critical issues that can arise during the life of a PCB is delamination, a '
             'condition that compromises the integrity and reliability of the board.</p>'
+        )
+        st.html(
             '<p class="hero-copy">Temperature and moisture are two contributing factors. '
             'During manufacturing, PCBs are exposed to various heating cycles, including '
             'soldering processes. Each of these cycles can create stresses that result in '
@@ -701,18 +642,15 @@ def render_home():
             'penetrates the PCB, it can cause the internal layers to expand. Under high '
             'temperatures, trapped moisture can turn into steam, creating pressure that '
             'leads to layer separation.</p>',
-            unsafe_allow_html=True,
         )
-        st.button("Open the stress analyser →", type="primary", on_click=navigate,
-                  args=(NAVIGATION[0],), key="open_simulation")
-    with illustration:
+    with illustration.container(key="home_illustration", height="stretch"):
         animation = (Path(__file__).parent / "assets" / "laminate_animation.html").read_text(encoding="utf-8")
-        st.iframe(typography.document_fonts(animation), height="content")
+        st.iframe(typography.document_fonts(animation), height="stretch")
 
-    st.write("")
+    st.divider()
     render_home_stress_flow()
 
-    st.write("")
+    st.divider()
     st.subheader("Laminate Stress Explorer")
     simulation, sensitivity, inverse = st.columns(3, gap="medium", border=True)
     with simulation:
@@ -736,8 +674,7 @@ def render_home():
             render_exploration_icon(INVERSE_EXPLORATION_ICON)
             st.caption("03 · INVERSE EXPLORATION")
             st.markdown("#### Find materials and explore structures")
-            st.write("Find up to 10 materials that meet your application requirements, ranked by stress, swelling or moisture content. "
-                     "Explore laminate constituents and layouts with research on their effect on properties and stress.")
+            st.write("Find up to 10 materials that meet your application requirements, ranked by stress, swelling or moisture content. ")
         st.button("View section →", on_click=navigate, args=(NAVIGATION[2],), key="home_inverse")
     st.caption("The explorer calculates an analytical mismatch stress index. "
                "Delamination assessment requires specific geometry and interface adhesion data.")
@@ -758,207 +695,120 @@ def render_simulation_inputs():
         st.session_state.setdefault(key, value)
     selected = st.session_state["preset_selector"]
     if selected not in PRESETS:
-        # Preserve existing input edits when a saved preset name has changed.
         st.session_state["preset_selector"] = LEGACY_PRESET_NAMES.get(selected, "Custom / Manual Entry")
 
-    with st.container(horizontal=True, wrap=False, vertical_alignment="center",
-                      gap="small", key="stress_analyser_header"):
-        render_exploration_icon(STRESS_ANALYSER_ICON)
-        st.title("Stress Analyser")
-    st.caption("Choose your material and exposure conditions, then follow the calculation from uptake to stress.")
-    structure, inputs = st.columns([1.65, 1], gap="large")
-    with inputs.container(border=True, height="stretch", key="simulation_scenario"):
-        st.markdown('<h3 class="scenario-section-heading">Exposure</h3>', unsafe_allow_html=True)
-        temperature_change = st.number_input("Change in Temperature (°C or K)", key="field_delta_T", step=5.0)
-        exposure_time_hours = st.number_input("Soak Time (hours)", min_value=0.0, key="field_t_hours", step=1.0)
+    with st.container(key="simulation_workspace"):
+        structure, inputs = st.columns([1.05, 1], gap="medium")
+        with inputs.container(border=True, key="simulation_scenario"):
+            st.html('<p class="compact-section-label">Laminate</p>')
+            st.selectbox("Laminate", list(PRESETS), key="preset_selector", on_change=load_preset_values,
+                         label_visibility="collapsed",
+                         help="Load the selected laminate's properties. All inputs remain editable.")
+            st.html('<p class="compact-section-label">Exposure & geometry</p>')
+            temperature, time = st.columns(2, gap="small")
+            temperature_change = temperature.number_input("Temperature change ΔT (°C / K)", key="field_delta_T", step=5.0)
+            exposure_time_hours = time.number_input("Soak time (h)", min_value=0.0, key="field_t_hours", step=1.0)
+            geometry, copper = st.columns(2, gap="small")
+            laminate_thickness_millimeters = geometry.number_input("Thickness h (mm)", min_value=0.001,
+                                                                   key="field_h_mm", step=0.1)
+            copper_thermal_expansion_coefficient = copper.number_input("Copper CTE (ppm/K)", key="field_alpha_cu", step=0.5)
 
-        st.markdown('<h3 class="scenario-section-heading">Geometry</h3>', unsafe_allow_html=True)
-        laminate_thickness_millimeters = st.number_input("Laminate Thickness (mm)", min_value=0.001, key="field_h_mm", step=0.1)
+            st.html('<hr class="compact-section-divider">')
+            st.html('<p class="compact-section-label">Material properties</p>')
+            stiffness, poisson = st.columns(2, gap="small")
+            youngs_modulus = stiffness.number_input("Young's modulus E (MPa)", min_value=0.001, key="field_E", step=500.0)
+            poisson_ratio = poisson.number_input("Poisson's ratio ν", min_value=-0.99, max_value=0.499,
+                                                 key="field_nu", step=0.01, format="%.3f")
+            expansion, diffusion = st.columns(2, gap="small", vertical_alignment="bottom")
+            laminate_thermal_expansion_coefficient = expansion.number_input("Laminate CTE (ppm/K)", key="field_alpha_lam", step=0.5)
+            moisture_diffusivity = diffusion.number_input("Diffusivity D (m²/s)", min_value=0.0, key="field_D",
+                                                         step=1e-14, format="%.2e",
+                                                         help="Effective Fickian diffusivity at chamber temperature.")
+            capacity, swelling = st.columns(2, gap="small")
+            saturation_moisture_concentration = capacity.number_input("Saturation Csat (mol/m³)", min_value=0.0,
+                                                                      key="field_Csat", step=10.0,
+                                                                      help="Csat ≈ (WA% / 100) × (Density / 0.018015)")
+            hygroscopic_expansion_coefficient = swelling.number_input("Moisture expansion β (m³/kg)", min_value=0.0,
+                                                                      key="field_beta", step=1e-5, format="%.2e",
+                                                                      help="In-plane coefficient of hygroscopic expansion.")
+            with st.container(key="simulation_actions"):
+                reference, action = st.columns([1, 1.5], gap="small", vertical_alignment="bottom")
+                metadata = PRESET_METADATA.get(st.session_state["preset_selector"])
+                if metadata:
+                    with reference.popover("Material reference", width="stretch"):
+                        st.caption(f"{metadata['material_class']} · {metadata['condition']}.")
+                        st.caption("Preset properties are compiled from publicly available manufacturer datasets and technical "
+                                   "datasheets for reference. Original sources retain their respective rights.")
+                calculate = action.button("Calculate", type="primary", key="calculate_simulation", width="stretch")
 
-        st.markdown('<h3 class="scenario-section-heading">Material Properties</h3>', unsafe_allow_html=True)
-        st.markdown('<h4 class="scenario-property-heading">Mechanical Properties</h4>', unsafe_allow_html=True)
-        youngs_modulus = st.number_input("Young's Modulus E (MPa)", min_value=0.001, key="field_E", step=500.0)
-        poisson_ratio = st.number_input("Poisson's Ratio ν", min_value=-0.99, max_value=0.499,
-                             key="field_nu", step=0.01, format="%.3f")
-        laminate_thermal_expansion_coefficient = st.number_input("In-Plane CTE α (ppm/K)", key="field_alpha_lam", step=0.5)
-        copper_thermal_expansion_coefficient = st.number_input("Copper Foil CTE (ppm/K)", key="field_alpha_cu", step=0.5)
-        st.markdown('<h4 class="scenario-property-heading">Hygroscopic Properties</h4>', unsafe_allow_html=True)
-        moisture_diffusivity = st.number_input("Diffusion Coefficient D (m²/s)", min_value=0.0, key="field_D",
-                            step=1e-14, format="%.2e",
-                            help="Effective Fickian diffusivity at chamber temperature.")
-        saturation_moisture_concentration = st.number_input("Saturation Concentration Csat (mol/m³)", min_value=0.0,
-                               key="field_Csat", step=10.0,
-                               help="Csat ≈ (WA% / 100) * (Density / 0.018015)")
-        hygroscopic_expansion_coefficient = st.number_input("In-Plane CHE β (m³/kg)", min_value=0.0,
-                               key="field_beta", step=1e-5, format="%.2e",
-                               help="In-plane coefficient of hygroscopic expansion.")
-
-        with st.container(horizontal=True, horizontal_alignment="right"):
-            calculate = st.button("Calculate", type="primary", key="calculate_simulation")
-
-    with structure.container(border=True, height="stretch", key="simulation_structure"):
-        st.header("Choose your laminate")
-        st.caption("Start with a preset or enter your own properties. ")
-        st.selectbox("Material Preset", list(PRESETS), key="preset_selector",
-                     on_change=load_preset_values, label_visibility="collapsed",
-                     help="Load the selected laminate's properties and conditioning scenario. All inputs remain editable.")
-        render_stack(
-            st.session_state["preset_selector"],
-            laminate_thickness_millimeters,
-            laminate_thermal_expansion_coefficient,
-            copper_thermal_expansion_coefficient,
-        )
-        metadata = PRESET_METADATA.get(st.session_state["preset_selector"])
-        if metadata:
-            with st.expander("Material reference"):
-                st.caption(f"{metadata['material_class']} · {metadata['condition']}.")
-                st.caption("Preset properties are compiled from publicly available manufacturer datasets and technical "
-                           "datasheets for reference. Original sources retain their respective rights.")
+        with structure.container(key="simulation_structure"):
+            render_stack(st.session_state["preset_selector"], laminate_thickness_millimeters,
+                         laminate_thermal_expansion_coefficient, copper_thermal_expansion_coefficient,
+                         compact=True)
 
     st.session_state["simulation_inputs"] = {key: st.session_state[key] for key in defaults}
-    return (
-        dict(
-            D=moisture_diffusivity,
-            Csat=saturation_moisture_concentration,
-            h_mm=laminate_thickness_millimeters,
-            t_hours=exposure_time_hours,
-            beta=hygroscopic_expansion_coefficient,
-            alpha_lam=laminate_thermal_expansion_coefficient,
-            alpha_cu=copper_thermal_expansion_coefficient,
-            delta_T=temperature_change,
-            E=youngs_modulus,
-            nu=poisson_ratio,
-        ),
-        calculate,
-    )
+    return dict(D=moisture_diffusivity, Csat=saturation_moisture_concentration,
+                h_mm=laminate_thickness_millimeters, t_hours=exposure_time_hours,
+                beta=hygroscopic_expansion_coefficient, alpha_lam=laminate_thermal_expansion_coefficient,
+                alpha_cu=copper_thermal_expansion_coefficient, delta_T=temperature_change,
+                E=youngs_modulus, nu=poisson_ratio), calculate
+
+
+@st.dialog("Calculation results", width="large")
+def render_simulation_results(calculation):
+    inputs = calculation["scenario"]["inputs"]
+    results = calculation["results"]
+    with st.container(key="simulation_results_modal"):
+        st.caption(f"{calculation['scenario']['preset']} · Soak {inputs['t_hours']:g} h · "
+                   f"Thickness {inputs['h_mm']:g} mm · ΔT {inputs['delta_T']:+g} K")
+        stress_results.render_summary(results, key="simulation", compact=True)
+        contributions, uptake = st.tabs(["Stress contributions", "Moisture uptake"])
+        with contributions:
+            stress_results.render_contributions(results, key="simulation", height=240)
+        with uptake:
+            render_moisture_uptake(inputs["D"], inputs["h_mm"] / 1000, inputs["t_hours"], results["Mt_Minf"],
+                                   height=240, compact=True)
+        st.caption("The calculated stress index is an indicator. Assessing delamination risk requires physical measurements, "
+                   "including interface adhesion tests under the relevant exposure conditions.")
 
 
 def render_simulation():
-    simulation_inputs, calculate = render_simulation_inputs()
-    moisture_diffusivity = simulation_inputs["D"]
-    saturation_moisture_concentration = simulation_inputs["Csat"]
-    laminate_thickness_millimeters = simulation_inputs["h_mm"]
-    exposure_time_hours = simulation_inputs["t_hours"]
-    hygroscopic_expansion_coefficient = simulation_inputs["beta"]
-    laminate_thermal_expansion_coefficient = simulation_inputs["alpha_lam"]
-    copper_thermal_expansion_coefficient = simulation_inputs["alpha_cu"]
-    temperature_change = simulation_inputs["delta_T"]
-    youngs_modulus = simulation_inputs["E"]
-    poisson_ratio = simulation_inputs["nu"]
-
-    laminate_thickness_meters = laminate_thickness_millimeters / 1000.0
-    exposure_time_seconds = exposure_time_hours * 3600.0
-
-    scenario = {"preset": st.session_state["preset_selector"], "inputs": simulation_inputs}
+    inputs, calculate = render_simulation_inputs()
+    scenario = {"preset": st.session_state["preset_selector"], "inputs": inputs}
     if calculate:
-        simulation_results = run_analytical_stress_pipeline(
-            moisture_diffusivity=moisture_diffusivity,
-            saturation_moisture_concentration=saturation_moisture_concentration,
-            laminate_thickness_meters=laminate_thickness_meters,
-            exposure_time_seconds=exposure_time_seconds,
-            hygroscopic_expansion_coefficient=hygroscopic_expansion_coefficient,
-            laminate_thermal_expansion_coefficient=laminate_thermal_expansion_coefficient,
-            copper_thermal_expansion_coefficient=copper_thermal_expansion_coefficient,
-            temperature_change=temperature_change,
-            youngs_modulus=youngs_modulus,
-            poisson_ratio=poisson_ratio,
+        results = run_analytical_stress_pipeline(
+            moisture_diffusivity=inputs["D"], saturation_moisture_concentration=inputs["Csat"],
+            laminate_thickness_meters=inputs["h_mm"] / 1000, exposure_time_seconds=inputs["t_hours"] * 3600,
+            hygroscopic_expansion_coefficient=inputs["beta"], laminate_thermal_expansion_coefficient=inputs["alpha_lam"],
+            copper_thermal_expansion_coefficient=inputs["alpha_cu"], temperature_change=inputs["delta_T"],
+            youngs_modulus=inputs["E"], poisson_ratio=inputs["nu"],
         )
-        st.session_state["simulation_calculation"] = {"scenario": scenario, "results": simulation_results}
-
-    calculation = st.session_state.get("simulation_calculation")
-    if calculation is None or calculation["scenario"] != scenario:
+        st.session_state["simulation_calculation"] = dict(scenario=scenario, results=results)
+        render_simulation_results(st.session_state["simulation_calculation"])
+    elif st.session_state.get("simulation_calculation", {}).get("scenario") != scenario:
         st.session_state.pop("simulation_calculation", None)
-        st.caption("Click Calculate to see the results for this scenario.")
-        return
-    simulation_results = calculation["results"]
-
-    st.caption(
-        f"Active Scenario: **{st.session_state['preset_selector']}** | "
-        f"Exposure: **{exposure_time_hours:.1f} h** | "
-        f"Thickness: **{laminate_thickness_millimeters:.2f} mm**"
-    )
-
-    # Equal-height result cards share the moisture and thermal palette.
-    with st.container(key="simulation_results"):
-        columns = st.columns(4, border=True)
-        keys = ("result_saturation", "result_hygroscopic", "result_thermal", "result_net")
-        col1, col2, col3, col4 = [column.container(border=False, key=key)
-                                for column, key in zip(columns, keys)]
-        col1.metric("Moisture Saturation", f"{simulation_results['Mt_Minf'] * 100:.2f} %")
-        col1.caption("Fractional equilibrium uptake (Mt/M∞) achieved under 1D Fickian diffusion at the current exposure duration.")
-        col2.metric("Hygroscopic Strain", f"{simulation_results['eps_h']:.2e}")
-        col2.caption("Moisture-driven in-plane swelling strain: positive indicates matrix dilatation from absorbed water.")
-        col3.metric("Thermal Strain", f"{simulation_results['eps_t']:.2e}")
-        col3.caption("Unconstrained differential thermal strain: negative indicates copper expands more during heating.")
-        col4.metric("Net Stress Index", f"{simulation_results['sigma_index']:.2f} MPa")
-        col4.caption("Constrained equibiaxial stress: positive denotes in-plane tension; negative denotes compression.")
-
-    render_moisture_uptake(
-        moisture_diffusivity,
-        laminate_thickness_meters,
-        exposure_time_hours,
-        simulation_results["Mt_Minf"],
-    )
-
-    st.write("")
-    chart, commentary = st.columns([1.1, 0.9], gap="large")
-    with chart:
-        st.subheader("Stress Contributions and Net Index")
-        values = [
-            simulation_results["sigma_hygro"],
-            simulation_results["sigma_thermal"],
-            simulation_results["sigma_index"],
-        ]
-        figure = go.Figure(go.Bar(
-            x=["Hygroscopic", "Thermal", "Net Stress Index"], y=values,
-            marker_color=["#368575", "#c87d55", "#7f8165"],
-            text=[f"{value:+.2f} MPa" for value in values], textposition="auto",
-            hovertemplate="%{x}<br>%{y:+.4f} MPa<extra></extra>",
-        ))
-        figure.update_layout(
-            height=350, margin=dict(l=10, r=10, t=15, b=10), bargap=0.5,
-            showlegend=False,
-            yaxis=dict(title="Stress-index value (MPa)", zeroline=True,
-                       zerolinecolor="#78988e", zerolinewidth=1.5),
-        )
-        st.plotly_chart(figure, width="stretch", key="stress_contributions_chart")
-
-    with commentary:
-        st.subheader("Results")
-        with st.container(border=True):
-            headline, effect = interpret_stress_contributions(
-                simulation_results["sigma_hygro"], simulation_results["sigma_thermal"]
-            )
-            st.markdown(f"**{headline}**")
-            st.write(f"Hygroscopic contribution: **{simulation_results['sigma_hygro']:+.2f} MPa**  \n"
-                     f"Thermal contribution: **{simulation_results['sigma_thermal']:+.2f} MPa**")
-            st.write(effect)
-            st.markdown(f"The resulting net stress index is **{simulation_results['sigma_index']:+.2f} MPa**.")
-    st.caption(
-        "The calculated stress index is an indicator. Assessing delamination risk requires "
-        "physical measurements, including interface adhesion tests under the relevant exposure conditions."
-    )
 
 
 def render_inverse_exploration():
-    with st.container(horizontal=True, wrap=False, vertical_alignment="center",
-                      gap="small", key="inverse_exploration_header"):
-        render_exploration_icon(INVERSE_EXPLORATION_ICON)
-        st.title("Inverse Exploration")
     render_inverse(MATERIAL_LIBRARY["presets"])
 
 
 def main():
     st.set_page_config(page_title="Hygrothermal Effects on Copper-Laminate Interfaces", page_icon="⚡", layout="wide")
     render_style()
-    brand, navigation = st.columns([1, 3], vertical_alignment="center")
-    with brand:
-        st.button("◈ Bonded by Stress", key="home_link", on_click=navigate,
-                  help="Return to the front page")
-    with navigation:
-        section = st.pills("Explore", NAVIGATION, key="main_navigation", required=True,
-                           label_visibility="collapsed")
-    st.divider()
+    if st.session_state.get("main_navigation") not in [HOME_PAGE, *NAVIGATION]:
+        st.session_state["main_navigation"] = HOME_PAGE
+    current_page = st.session_state["main_navigation"]
+    with st.container(key="site_header"):
+        title = current_page if current_page != HOME_PAGE else ""
+        st.html(f'<h1 class="site-page-title">{title}</h1>')
+        with st.container(horizontal=True, horizontal_alignment="center", key="site_navigation_shell"):
+            section = st.pills(
+                "Explore", [HOME_PAGE, *NAVIGATION], key="main_navigation", required=True,
+                label_visibility="collapsed", width="content", wrap=True,
+                format_func=lambda page: "◈ Bonded by Stress" if page == HOME_PAGE else page,
+                on_change=request_navigation_scroll,
+            )
     if section == NAVIGATION[0]:
         render_simulation()
     elif section == NAVIGATION[1]:
