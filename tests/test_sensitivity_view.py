@@ -1,4 +1,4 @@
-"""Exercise editable sensitivity inputs and result placement through Streamlit."""
+"""Exercise editable sensitivity inputs and modal results through Streamlit."""
 import json
 from pathlib import Path
 import unittest
@@ -40,18 +40,18 @@ class SensitivityViewTests(unittest.TestCase):
         self.assertFalse(self.app.exception)
         self.assertFalse(self.app.warning)
 
-    def results_column(self):
-        return next(column for column in self.app.columns
-                    if any(heading.value == "Sensitivity results" for heading in column.subheader))
+    def results_modal(self):
+        return self.app.get("dialog")[0]
 
-    def test_results_are_on_right_and_sampling_controls_are_hidden(self):
+    def test_results_open_in_modal_and_sampling_controls_are_hidden(self):
         labels = [item.label for item in self.app.number_input]
         self.assertNotIn("Base sample size N", labels)
         self.assertNotIn("Sampling seed", labels)
+        self.assertEqual(len(self.app.get("dialog")), 0)
+        self.assertEqual(len(self.app.get("plotly_chart")), 0)
         self.run_analysis()
-        left, right = self.app.columns[0], self.results_column()
-        self.assertEqual(len(left.get("plotly_chart")), 0)
-        self.assertEqual(len(right.get("plotly_chart")), 1)
+        self.assertEqual(len(self.app.get("dialog")), 1)
+        self.assertEqual(len(self.results_modal().get("plotly_chart")), 1)
         config = self.app.session_state["sensitivity_result"]["config"]
         self.assertEqual(config["N"], 4096)
         self.assertEqual(config["seed"], 12345)
@@ -80,14 +80,14 @@ class SensitivityViewTests(unittest.TestCase):
         self.assertEqual(table.loc["E", "Upper"], 40000.)
         self.assertNotIn("Distribution", table.columns)
         self.assertEqual(len(self.app.get("plotly_chart")), 0)
-        self.assertTrue(any("settings have changed" in item.value for item in self.app.info))
+        self.assertEqual(len(self.app.get("dialog")), 0)
         self.run_analysis()
         config = self.app.session_state["sensitivity_result"]["config"]
         bounds = next(row for row in config["ranges"] if row["Parameter"] == "E")
         self.assertEqual(bounds["Upper"], 40000.)
 
     def test_comparison_materials_keep_separate_inputs_across_range_modes(self):
-        self.app.segmented_control(key="sens_scope").set_value("Compare materials").run()
+        self.app.pills(key="sens_scope").set_value("Compare materials").run()
         self.edit({"E": {"Nominal": 30000., "Lower": 20000., "Upper": 40000.}})
         editors = [item for item in self.app.dataframe if item.key and item.key.startswith("sens_inputs_")]
         self.assertEqual(editors[0].value.set_index("Parameter").loc["E", "Nominal"], 30000.)
@@ -100,7 +100,7 @@ class SensitivityViewTests(unittest.TestCase):
         self.assertEqual(self.app.dataframe[0].value.set_index("Parameter").loc["E", "Lower"], 20000.)
         self.run_analysis()
         self.assertEqual(len(self.app.session_state["sensitivity_batch"]["runs"]), 2)
-        self.assertEqual(len(self.results_column().get("plotly_chart")), 2)
+        self.assertEqual(len(self.results_modal().get("plotly_chart")), 2)
 
     def test_empty_selection_invalid_bounds_and_arrhenius(self):
         self.app.multiselect(key="sens_parameters_1").set_value([]).run()
@@ -110,7 +110,7 @@ class SensitivityViewTests(unittest.TestCase):
         self.app.button(key="sens_run").click().run()
         self.assertFalse(self.app.exception)
         self.assertTrue(any("upper bound" in item.value for item in self.app.warning))
-        self.app.radio(key="sens_study").set_value(STUDIES[0]).run()
+        self.app.selectbox(key="sens_study").set_value(STUDIES[0]).run()
         self.app.radio(key="sens_diffusion_model").set_value("Arrhenius").run()
         self.assertEqual(self.app.dataframe[0].value.set_index("Parameter").loc["D", "Treatment"],
                          "From temperature")

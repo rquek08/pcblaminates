@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import qmc
 
-MODEL_VERSION = "one-sided-diffusion-v1"
+MODEL_VERSION = "one-sided-diffusion-v2"
 
 PARAMETERS = {
     "alpha_lam": ("Laminate CTE", "ppm/K", 8.0, 23.0, "uniform"),
