@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="home-laminate-document">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -117,9 +117,6 @@
       <span><span class="arrow-swatch">→</span>Expansion restraint</span>
     </div>
     <p id="status" role="status" aria-live="polite">Bonded stack: copper and laminate share the same in-plane deformation at each interface.</p>
-    <p class="note">Qualitative bonded-stack schematic, exaggerated and not to scale. Inward arrows show
-      restraint by the adjacent bonded material, rather than an external load. Arrow size does not represent stress magnitude.
-      Coatings follow the stack; their own expansion is not modelled.</p>
   </section>
   <script>
     const viewer = document.querySelector('.viewer');
@@ -142,6 +139,28 @@
       heat: 'Heat: copper tends to expand more than the laminate in this example. The inward arrows at both copper layers show their expansion being restrained by the laminate.',
       combined: 'Heat + moisture: moisture swelling partly offsets the thermal mismatch in this example. The laminate still tends to expand more overall, so the arrows show its restraint by the copper.'
     };
+
+    function reserveStatusSpace() {
+      // Measure every description at the current width without changing the live region.
+      const probe = document.createElement('p');
+      probe.setAttribute('aria-hidden', 'true');
+      Object.assign(probe.style, {
+        position: 'absolute', visibility: 'hidden', pointerEvents: 'none', margin: '0',
+        width: `${status.getBoundingClientRect().width}px`, font: getComputedStyle(status).font
+      });
+      viewer.appendChild(probe);
+      let height = 0;
+      Object.values(descriptions).forEach(text => {
+        probe.textContent = text;
+        height = Math.max(height, probe.getBoundingClientRect().height);
+      });
+      probe.remove();
+      status.style.height = `${Math.ceil(height)}px`;
+      status.style.flexShrink = '0';
+    }
+    reserveStatusSpace();
+    new ResizeObserver(reserveStatusSpace).observe(status);
+    document.fonts.ready.then(reserveStatusSpace);
 
     function dimensions() {
       const moisture = exposures.has('moisture') ? 1 : 0;

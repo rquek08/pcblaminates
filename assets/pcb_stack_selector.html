@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="pcb-structure-document">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -14,6 +14,7 @@
     .heading { margin: 0; font-size: 19px; font-weight: 650; }
     .material { margin: 8px 0 0; color: #b7d1c8; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
     .controls { display: flex; gap: 8px; margin-top: 15px; flex-wrap: wrap; }
+    .diagram-view-label { align-self: center; color: #9bc9bb; font-size: 11px; margin-right: 5px; }
     button { cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; padding: 9px 13px;
       border-radius: 8px; border: 1px solid #587c76; background: transparent; color: #dfede7; }
     button[aria-pressed="true"] { background: #dcece3; color: #173f36; border-color: #dcece3; }
@@ -27,6 +28,8 @@
     .detail { opacity: 0; transform: scale(.8); transform-origin: center; pointer-events: none; visibility: hidden; }
     .is-detail .stack { opacity: 0; transform: scale(1.65); pointer-events: none; visibility: hidden; }
     .is-detail .detail { opacity: 1; transform: scale(1); visibility: visible; }
+    .detail-back { display: none; position: absolute; top: 6px; left: 0; z-index: 2; }
+    .is-detail .detail-back { display: inline-flex; }
     .layer { transition: opacity .2s; }
     .layer.inspectable { cursor: zoom-in; }
     .layer.inspectable:hover .face { stroke: #fff1ba; stroke-width: 2.5; }
@@ -49,10 +52,12 @@
     <h3 class="heading">From Board to Bond </h3>
     <p class="material" id="material"></p>
     <div class="controls" role="group" aria-label="Structure view">
+      <span class="diagram-view-label">Diagram view</span>
       <button type="button" id="overview" aria-pressed="true">Full PCB stack</button>
       <button type="button" id="zoom" aria-pressed="false">Zoom into interface ↗</button>
     </div>
     <div class="stage">
+      <button type="button" class="detail-back" id="back-to-stack">← Back to full structure</button>
       <svg class="stack" viewBox="0 0 680 560" role="img" aria-labelledby="stack-title stack-desc">
         <title id="stack-title">Exploded four-layer PCB stack</title>
         <desc id="stack-desc">Silkscreen, solder mask, four copper layers, prepreg and a laminate core. The selected core interface is highlighted.</desc>
@@ -166,6 +171,7 @@
       node('path', {d:`M451 ${y-24} H480 L496 ${y-30} H512`,class:`leader${chosen ? ' selected' : ''}`},labels);
       node('text', {x:520,y:y-26,class:`layer-label${chosen ? ' selected' : ''}`},labels,layer.label);
     }
+    document.documentElement.classList.toggle('is-compact', Boolean(config.compact));
     document.querySelector('#material').textContent = config.material;
     document.querySelector('#thickness').textContent = `Core · ${Number(config.thickness).toLocaleString()} mm`;
     document.querySelector('#laminate-cte').textContent = `Laminate CTE · ${Number(config.laminateCTE).toLocaleString()} ppm/K`;
@@ -185,6 +191,11 @@
     document.querySelector('#interface-callout').setAttribute('d',`M78 ${bondY} H40 V375 H70`);
     const overview = document.querySelector('#overview');
     const zoom = document.querySelector('#zoom');
+    const back = document.querySelector('#back-to-stack');
+    if (config.compact) {
+      overview.textContent = 'PCB stack';
+      zoom.textContent = 'Interface';
+    }
     function setDetail(detail) {
       viewer.classList.toggle('is-detail', detail);
       overview.setAttribute('aria-pressed',String(!detail));
@@ -197,8 +208,14 @@
     }
     overview.addEventListener('click',()=>setDetail(false));
     zoom.addEventListener('click',()=>setDetail(true));
-    document.addEventListener('keydown',event=>{if(event.key==='Escape')setDetail(false);});
-    setDetail(false);
+    back.addEventListener('click', () => { setDetail(false); overview.focus(); });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && viewer.classList.contains('is-detail')) {
+        setDetail(false);
+        overview.focus();
+      }
+    });
+    setDetail(config.view === 'detail');
   </script>
 </body>
 </html>
