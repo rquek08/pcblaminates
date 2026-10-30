@@ -577,12 +577,30 @@ def render_home_stress_flow():
     ''', unsafe_allow_html=True)
     with st.container(border=True, key="home_combined_index"):
         st.markdown("#### Combined stress index")
+        st.markdown('<p class="flow-desc">A signed measure of the constrained in-plane response for comparing materials and exposure conditions.</p>', unsafe_allow_html=True)
+        st.markdown(
+                """
+                    <style>
+                    .flow-step {
+                    font-size: 0.75rem !important;
+                    font-weight: 600;
+                    letter-spacing: 0.05em;
+                    }
+                    .flow-desc {
+                    font-size: 0.8rem !important;  /* Adjust size as needed */
+                    margin-top: -0.8rem;
+                    margin-bottom: 0.1rem;
+                    }
+                    </style>
+                    """,
+                    unsafe_allow_html=True,
+            )
         render_symbol_equation(
             r"[[sigma_index]] = [[sigma_h]] + [[sigma_T]]"
             r" = \frac{[[E]]}{1-[[nu]]}"
             r"\left([[eps_h]] + [[eps_T]]\right)"
         )
-        st.write("A signed measure of the constrained in-plane response for comparing materials and exposure conditions.")
+        #st.write("A signed measure of the constrained in-plane response for comparing materials and exposure conditions.")
         
     with st.expander("Moisture uptake model"), st.container(border=False, key="home_uptake_model"):
         st.write("Fick's second law gives the fractional moisture uptake used in the swelling path; "
