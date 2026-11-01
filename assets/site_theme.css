@@ -361,3 +361,16 @@
 .st-key-inverse_results_modal [data-testid="stMetricValue"],
 .st-key-inverse_results_modal [data-testid="stMetricValue"] * { font-size: 1.5rem !important; }
 .st-key-inverse_results_modal [class*="st-key-stress_results_"] [data-testid="stColumn"] { padding: .65rem; }
+
+/* Scale each analysis page as one unit, including its embedded diagrams. */
+@media (min-width: 1100px) {
+  .block-container:has(:is(.st-key-simulation_workspace, .st-key-sensitivity_workspace, .st-key-inverse_workspace)) {
+    zoom: 1.1;
+  }
+}
+/* Keep the single-screen layout on shorter laptop windows. */
+@media (min-width: 1100px) and (max-height: 760px) {
+  .block-container:has(:is(.st-key-simulation_workspace, .st-key-sensitivity_workspace, .st-key-inverse_workspace)) {
+    zoom: 1.03;
+  }
+}
