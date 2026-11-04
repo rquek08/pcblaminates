@@ -14,13 +14,13 @@ from scipy.stats import qmc
 MODEL_VERSION = "one-sided-diffusion-v2"
 
 PARAMETERS = {
-    "alpha_lam": ("Laminate CTE", "ppm/K", 8.0, 23.0, "uniform"),
-    "beta": ("Moisture expansion (CHE)", "m³/kg", 1.15e-4, 3.8e-4, "uniform"),
-    "E": ("Young's modulus", "MPa", 7500.0, 28000.0, "uniform"),
-    "nu": ("Poisson's ratio", "dimensionless", 0.175, 0.32, "uniform"),
-    "Csat": ("Saturation moisture concentration", "mol/m³", 92.5, 366.0, "uniform"),
+    "alpha_lam": ("Laminate CTE", "ppm/K", 9.0, 16.0, "uniform"),
+    "beta": ("Moisture expansion (CHE)", "m³/kg", 1.0e-4, 3.5e-4, "uniform"),
+    "E": ("Young's modulus", "MPa", 20000.0, 32000.0, "uniform"),
+    "nu": ("Poisson's ratio", "dimensionless", 0.15, 0.25, "uniform"),
+    "Csat": ("Saturation moisture concentration", "mol/m³", 150.0, 600.0, "uniform"),
     "D": ("Effective diffusivity", "m²/s", 2.15e-14, 2.0e-12, "log-uniform"),
-    "delta_T": ("Temperature change ΔT", "K", 10.0, 100.0, "uniform"),
+    "delta_T": ("Temperature change ΔT", "K", 5.0, 60.0, "uniform"),
     "t_hours": ("Exposure time", "h", 24.0, 8760.0, "log-uniform"),
     "h_mm": ("Laminate thickness", "mm", 0.2, 3.2, "uniform"),
 }
