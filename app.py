@@ -691,7 +691,7 @@ def render_home():
         with st.container(border=False, height="stretch", key="home_inverse_card"):
             render_exploration_icon(INVERSE_EXPLORATION_ICON)
             st.caption("03 · INVERSE EXPLORATION")
-            st.markdown("#### Find materials and explore structures")
+            st.markdown("#### Recommend materials for application")
             st.write("Find up to 10 materials that meet your application requirements, ranked by stress, swelling or moisture content. ")
         st.button("View section →", on_click=navigate, args=(NAVIGATION[2],), key="home_inverse")
     st.caption("The explorer calculates an analytical mismatch stress index. "
