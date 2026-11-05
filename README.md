@@ -15,5 +15,10 @@ When these effects combine, they generate interfacial shear stresses that increa
 ### Features
 
 1. Stress Calculation
+Select a laminate preset from the materials library or customise your own to calculate the moisture and temperature induced strain, as well as a combined stress index. This gives users a sense of whether moisture or thermal contributions dominate in inducing stress on the laminate-copper interface.
+
 2. Sensitivity Analysis
+Evaluate First-Order (S1) and Total-Order (ST) Sobol indices using Saltelli sampling to quantify how much variance each input contributes to interfacial stress. Users are able to isolate exposure conditions or materials properties depending on which information is more useful for their application.
+
 3. Inverse Exploration
+Specify an allowable stress, or other material parameters thresholds, to identify permissible candidate materials from the database. This provides users with suggestions on possible laminates that they can use for their application.
