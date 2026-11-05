@@ -1,11 +1,13 @@
 // Attach hovercards to native KaTeX terms without changing their math layout.
 const normalize = text => text.replace(/[\s\u200b-\u200d\ufeff]/g, "");
-const selector = [
+const equationScopes = [
   ".st-key-home_moisture_path",
   ".st-key-home_thermal_path",
   ".st-key-home_combined_index",
   ".st-key-home_uptake_model"
-].map(scope => `${scope} .katex-html .mord`).join(",");
+];
+const selector = equationScopes.map(scope => `${scope} .katex-html .mord`).join(",");
+const equationSelector = equationScopes.map(scope => `${scope} .katex-display`).join(",");
 
 // Dispose of handlers and any open card when Streamlit renders this again.
 const previous = window.pcbEquationHints;
@@ -181,8 +183,27 @@ function alignFlowRows() {
   }
 }
 
+function fitEquations() {
+  document.querySelectorAll(equationSelector).forEach(display => {
+    if (!observedRows.has(display)) {
+      hints.rowObserver.observe(display);
+      observedRows.add(display);
+    }
+    const math = display.querySelector(":scope > .katex");
+    if (!math || !display.clientWidth) return;
+    // Reset first so formulas can grow back after a narrow window is widened.
+    math.style.fontSize = "";
+    const width = math.getBoundingClientRect().width;
+    const available = display.clientWidth - 8;
+    if (width > available && available > 0) {
+      math.style.fontSize = `${parseFloat(getComputedStyle(math).fontSize) * available / width}px`;
+    }
+  });
+}
+
 function attachHints() {
   hints.frame = null;
+  fitEquations();
   alignFlowRows();
   if (activeTerm && !activeTerm.isConnected) hideCard();
   // Annotate parents first so a composite term has one consistent definition.
@@ -214,4 +235,8 @@ hints.dispose = () => {
   card.remove();
 };
 window.pcbEquationHints = hints;
+listen(window, "resize", scheduleUpdate);
+document.fonts.ready.then(() => {
+  if (window.pcbEquationHints === hints) scheduleUpdate();
+});
 attachHints();

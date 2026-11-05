@@ -1,4 +1,19 @@
+.stApp :is(.st-key-home_moisture_path, .st-key-home_thermal_path,
+           .st-key-home_combined_index, .st-key-home_uptake_model) {
+  /* Give equations the full row, then fit long formulas in JavaScript. */
+  & [data-testid="stMarkdown"]:has(.katex-display) > div,
+  & [data-testid="stMarkdownContainer"]:has(.katex-display) {
+    width: 100%;
+    overflow: visible;
+  }
+  & .katex-display { overflow: visible !important; }
+  & .katex-display > .katex { display: inline-block; }
+}
+
 .equation-symbol-hint {
+  /* KaTeX's fraction spacers otherwise intercept denominator hover events. */
+  position: relative;
+  z-index: 1;
   color: #9ed9c4;
   cursor: pointer;
   border-radius: 3px;
