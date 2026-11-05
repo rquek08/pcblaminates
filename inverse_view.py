@@ -1,4 +1,4 @@
-"""Compact material recommendations with exploration and results in dialogs."""
+"""Compact material feasibility exploration with results in dialogs."""
 import hashlib
 from html import escape
 from io import BytesIO
@@ -59,14 +59,15 @@ def render_recommender(records):
 def render_recommender_controls(records):
     with st.container(key="inverse_controls_header"):
         title, help_button = st.columns([1.3, 1], gap="small", vertical_alignment="center")
-        title.html('<p class="compact-section-label">Material recommender</p>')
+        title.html('<p class="compact-section-label">Material feasibility</p>')
         guidance = help_button.popover("How ranking works", width="stretch")
     with guidance:
         st.write("Conditioning selects each material's tabulated properties. Diffusivity stays fixed at that condition. "
                  "Enter the temperature change for thermal mismatch separately.")
-        st.write("The recommender filters by material class, conditioning and your property bounds, then calculates "
+        st.write("The search filters by material class, conditioning and your property bounds, then calculates "
                  "moisture uptake, swelling and stress for every eligible record using the same application conditions. "
-                 "Materials meeting your output requirements are ranked by the selected objective, smallest first.")
+                 "Feasible materials meet the selected bounds and modelled output requirements, "
+                 "and are ranked by the selected objective, smallest first.")
         st.write("Large libraries are calculated in batches. Repeated requests are cached, and only the best "
                  "results are retained for display. The ranking uses all six material properties.")
         st.write("Moisture enters through one exposed face of the laminate. The opposite face interfaces "
@@ -86,7 +87,7 @@ def render_recommender_controls(records):
                     st.download_button("Download library CSV template", example.to_csv(index=False).encode(),
                                        "material_library.csv", "text/csv", key="inverse_library_template")
             if upload is None:
-                st.info("Upload a CSV library to configure the recommendation.")
+                st.info("Upload a CSV library to explore feasible materials.")
                 return
         try:
             frame, digest = load_library(records, upload.getvalue() if upload is not None else None)
@@ -170,7 +171,7 @@ def render_recommender_controls(records):
         for error in errors:
             st.error(error)
     with st.container(key="inverse_actions"):
-        submitted = st.button("Find recommended materials", type="primary", width="stretch",
+        submitted = st.button("Find feasible materials", type="primary", width="stretch",
                               key="inverse_recommend", disabled=bool(errors))
     if submitted:
         try:
@@ -190,17 +191,17 @@ def render_result_options(context):
     result = context["result"] if context else None
     st.html('<p class="compact-section-label">Results</p>')
     if result is None:
-        st.caption("Set your application conditions and run the recommender to unlock these views.")
+        st.caption("Set your application conditions and find feasible materials to unlock these views.")
     else:
-        st.caption(f"{len(result['candidates']):,} recommendations · {result['qualifying']:,} meet requirements · "
+        st.caption(f"{len(result['candidates']):,} feasible materials shown · {result['qualifying']:,} meet requirements · "
                    f"{result['evaluated']:,} materials calculated.")
     views = [
-        ("recommendations", "Recommended materials", ":material/table_view:",
+        ("recommendations", "Feasible materials", ":material/table_view:",
          "View the ranked results, inspect a material's stress contributions, and download the shortlist."),
         ("exploration", "Explore material properties", ":material/scatter_plot:",
-         "See the library in a 3D property space, with the recommended shortlist highlighted. Choose the three axes."),
+         "See the library in a 3D property space, with the feasible shortlist highlighted. Choose the three axes."),
         ("heatmap", "Materials heatmap", ":material/grid_on:",
-         "Compare stress, swelling and moisture uptake across the recommended materials."),
+         "Compare stress, swelling and moisture uptake across the feasible materials."),
     ]
     for view, label, icon, description in views:
         with st.container(key=f"inverse_result_{view}"):
@@ -219,7 +220,7 @@ def render_result_summary(context):
             label = {"sigma_abs": "Stress magnitude", "eps_h": "Swelling strain", "W_t": "Absorbed water"}[objective]
             unit = OBJECTIVES[objective][1]
             value = f"{row[objective]:.3g}" + (f" {unit}" if unit != "dimensionless" else "")
-            st.html('<p class="compact-section-label">Top recommendation</p>')
+            st.html('<p class="compact-section-label">Highest-ranked feasible material</p>')
             st.html(f'<p class="inverse-summary-name">{escape(str(row["name"]))}</p>')
             ranked, stress, saturation = st.columns(3, gap="small")
             ranked.metric(label, value)
@@ -244,7 +245,7 @@ def render_result_summary(context):
 
 
 def show_inverse_results(view, context):
-    titles = {"exploration": "Explore material properties", "recommendations": "Recommended Materials",
+    titles = {"exploration": "Explore material properties", "recommendations": "Feasible Materials",
               "heatmap": "Materials heatmap"}
 
     @st.dialog(titles[view], width="large")
@@ -290,7 +291,7 @@ def property_scatterplot(points, candidates, axes):
     labels = [f"{PARAMETERS[key][0]} ({PARAMETERS[key][1]})" for key in axes]
     for data, name, color, size, symbol in [
         (points, "Library", "#92b8ad", 4, "circle"),
-        (candidates, "Recommended shortlist", "#e3ac88", 7, "diamond"),
+        (candidates, "Feasible shortlist", "#e3ac88", 7, "diamond"),
     ]:
         if data.empty:
             continue
@@ -342,7 +343,7 @@ def render_recommendations(result, config, digest, signature, show_heading=True)
     application = config["application"]
     with st.container(key="inverse_recommendation_heading"):
         if show_heading:
-            st.subheader("Recommended Materials")
+            st.subheader("Feasible Materials")
         st.caption(f"Ranked by {OBJECTIVES[config['objective']][0].lower()} · {config['condition']} · "
                    f"ΔT {application['delta_T']:+g} K · soak {application['t_hours']:g} h · thickness {application['h_mm']:g} mm · "
                    f"copper CTE {application['alpha_cu']:g} ppm/K.")
@@ -356,9 +357,9 @@ def render_recommendations(result, config, digest, signature, show_heading=True)
         "Hygroscopic strain": st.column_config.NumberColumn(format="%.3e"),
     })
     with st.container(key="inverse_material_inspector"):
-        st.subheader("Inspect a recommended material")
+        st.subheader("Inspect a feasible material")
         # The signature gives changing result sets their own inspection state.
-        selected = st.selectbox("Recommended material", candidates.index.tolist(),
+        selected = st.selectbox("Feasible material", candidates.index.tolist(),
                                 format_func=lambda index: f"{index + 1}. {candidates.loc[index, 'name']}",
                                 key=f"inverse_selected_{signature[:12]}", label_visibility="collapsed")
         row = candidates.loc[selected]
@@ -367,8 +368,8 @@ def render_recommendations(result, config, digest, signature, show_heading=True)
         with st.expander("Material properties"):
             st.dataframe(pd.DataFrame([dict(Property=PARAMETERS[key][0], Value=row[key], Unit=PARAMETERS[key][1])
                                        for key in MATERIAL]), hide_index=True, width="stretch")
-    st.download_button("Download recommendations (CSV)", candidates.to_csv(index=False).encode(),
-                       "recommended_materials.csv", "text/csv", key="inverse_shortlist_download")
+    st.download_button("Download feasible materials (CSV)", candidates.to_csv(index=False).encode(),
+                       "feasible_materials.csv", "text/csv", key="inverse_shortlist_download")
 
 
 def recommendation_heatmap(candidates):

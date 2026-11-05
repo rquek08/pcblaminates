@@ -104,8 +104,8 @@ class RecommendationHeatmapTests(unittest.TestCase):
         app.button(key="inverse_open_recommendations").click().run()
         self.assertFalse(app.exception)
         self.assertEqual(len(app.get("dialog")), 1)
-        self.assertEqual(app.get("dialog")[0].proto.dialog.title, "Recommended Materials")
-        self.assertNotIn("Recommended Materials", [item.value for item in app.subheader])
+        self.assertEqual(app.get("dialog")[0].proto.dialog.title, "Feasible Materials")
+        self.assertNotIn("Feasible Materials", [item.value for item in app.subheader])
         # A normal app rerun closes the dialog; the next result uses the same shortlist.
         app.run()
         app.button(key="inverse_open_exploration").click().run()
@@ -113,7 +113,7 @@ class RecommendationHeatmapTests(unittest.TestCase):
         self.assertEqual(len(app.get("dialog")), 1)
         spec = json.loads(app.get("plotly_chart")[0].proto.spec)
         self.assertEqual([trace["type"] for trace in spec["data"]], ["scatter3d", "scatter3d"])
-        self.assertEqual(spec["data"][1]["name"], "Recommended shortlist")
+        self.assertEqual(spec["data"][1]["name"], "Feasible shortlist")
         app.radio(key="inverse_library_source").set_value("Upload CSV").run()
         self.assertFalse(app.exception)
         self.assertEqual(len(app.get("plotly_chart")), 0)
@@ -181,8 +181,8 @@ if saved:
         for selected in (0, 1):
             app.selectbox(key=selector_key).set_value(selected).run()
             self.assertFalse(app.exception)
-            self.assertNotIn("Inspect a recommended material", [item.label for item in app.expander])
-            self.assertIn("Inspect a recommended material", [item.value for item in app.subheader])
+            self.assertNotIn("Inspect a feasible material", [item.label for item in app.expander])
+            self.assertIn("Inspect a feasible material", [item.value for item in app.subheader])
             inspector = app
             row = candidates.loc[selected]
             cards = {item.label: item.value for item in inspector.metric}
