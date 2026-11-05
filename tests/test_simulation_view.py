@@ -11,7 +11,7 @@ APP = Path(__file__).resolve().parents[1] / "app.py"
 class SimulationViewTests(unittest.TestCase):
     def setUp(self):
         self.app = AppTest.from_file(str(APP), default_timeout=30).run()
-        self.app.pills(key="main_navigation").set_value("Stress Analyser").run()
+        self.app.pills(key="main_navigation").set_value("Stress Calculation").run()
         self.assertFalse(self.app.exception)
 
     def test_initial_view_has_inputs_on_right_and_no_inline_results(self):
@@ -47,7 +47,7 @@ class SimulationViewTests(unittest.TestCase):
         self.app.button(key="calculate_simulation").click().run()
         self.assertIn("simulation_calculation", self.app.session_state)
         self.app.pills(key="main_navigation").set_value("Home").run()
-        self.app.pills(key="main_navigation").set_value("Stress Analyser").run()
+        self.app.pills(key="main_navigation").set_value("Stress Calculation").run()
         self.assertEqual(self.app.number_input(key="field_D").value, 1e-12)
         self.app.number_input(key="field_delta_T").set_value(80.).run()
         self.assertFalse(self.app.exception)

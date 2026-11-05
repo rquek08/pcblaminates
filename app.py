@@ -402,7 +402,7 @@ def render_3d_deformation(
 # 6. USER INTERFACE: NAVIGATION, STYLING, AND PAGE LAYOUTS
 # -----------------------------------------------------------------------------
 HOME_PAGE = "Home"
-NAVIGATION = ["Stress Analyser", "Sensitivity Analysis", "Inverse Exploration"]
+NAVIGATION = ["Stress Calculation", "Sensitivity Analysis", "Inverse Exploration"]
 
 
 def navigate(section=None):
@@ -674,7 +674,7 @@ def render_home():
     with simulation:
         with st.container(border=False, height="stretch", key="home_simulation_card"):
             render_exploration_icon(STRESS_ANALYSER_ICON)
-            st.caption("01 · STRESS ANALYSER")
+            st.caption("01 · STRESS CALCULATION")
             st.markdown("#### Follow the physics")
             st.write("Input properties of your chosen laminate and its exposure conditions. Calculate moisture uptake, "
                      "swelling, and thermal mismatch to evaluate the resulting stress.")
