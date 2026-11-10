@@ -21,6 +21,9 @@ class SensitivityViewTests(unittest.TestCase):
     def setUp(self):
         self.app = AppTest.from_string(APP, default_timeout=30).run()
         self.assertFalse(self.app.exception)
+        self.assertEqual(self.app.selectbox(key="sens_study").value, STUDIES[0])
+        self.app.selectbox(key="sens_study").set_value(STUDIES[1]).run()
+        self.assertFalse(self.app.exception)
 
     def edit(self, changes, material=0):
         editor = [item for item in self.app.dataframe if item.key and item.key.startswith("sens_inputs_")][material]
@@ -95,7 +98,7 @@ class SensitivityViewTests(unittest.TestCase):
         self.app.radio(key="sens_range_basis").set_value("Broad exploratory ranges").run()
         table = self.app.dataframe[0].value.set_index("Parameter")
         self.assertEqual(table.loc["E", "Nominal"], 30000.)
-        self.assertEqual(table.loc["E", "Lower"], 7500.)
+        self.assertEqual(table.loc["E", "Lower"], 20000.)
         self.app.radio(key="sens_range_basis").set_value("Around each material").run()
         self.assertEqual(self.app.dataframe[0].value.set_index("Parameter").loc["E", "Lower"], 20000.)
         self.run_analysis()

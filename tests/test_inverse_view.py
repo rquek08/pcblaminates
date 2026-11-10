@@ -161,7 +161,7 @@ class RecommendationHeatmapTests(unittest.TestCase):
         np.testing.assert_array_equal(figure.data[0].z, points["beta"])
         np.testing.assert_array_equal(figure.data[1].x, shortlist["E"])
         self.assertEqual(figure.data[1].customdata[0][0], "B")
-        self.assertIn("Young's modulus (MPa)", figure.layout.scene.xaxis.title.text)
+        self.assertIn("Young's modulus E (MPa)", figure.layout.scene.xaxis.title.text)
         pd.testing.assert_frame_equal(points, original)
 
     def test_inspector_cards_and_contributions_follow_selected_material(self):

@@ -113,7 +113,7 @@ def render_sensitivity_controls(records):
         st.info("Choose at least one material.")
         return None
     study_input, response_input = st.columns(2, gap="small")
-    study = study_input.selectbox("Study", STUDIES, index=1,
+    study = study_input.selectbox("Study", STUDIES, index=0,
                                    format_func=lambda value: ["Exposure & geometry", "Material properties", "All parameters"][STUDIES.index(value)],
                                    key="sens_study", persist_state="session")
     group = STUDIES.index(study)

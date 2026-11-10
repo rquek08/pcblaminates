@@ -14,21 +14,21 @@ from scipy.stats import qmc
 MODEL_VERSION = "one-sided-diffusion-v2"
 
 PARAMETERS = {
-    "alpha_lam": ("Laminate CTE", "ppm/K", 9.0, 16.0, "uniform"),
-    "beta": ("Moisture expansion (CHE)", "m³/kg", 1.0e-4, 3.5e-4, "uniform"),
-    "E": ("Young's modulus", "MPa", 20000.0, 32000.0, "uniform"),
-    "nu": ("Poisson's ratio", "dimensionless", 0.15, 0.25, "uniform"),
-    "Csat": ("Saturation moisture concentration", "mol/m³", 150.0, 600.0, "uniform"),
-    "D": ("Effective diffusivity", "m²/s", 2.15e-14, 2.0e-12, "log-uniform"),
+    "alpha_lam": ("Laminate CTE αlam", "ppm/K", 9.0, 16.0, "uniform"),
+    "beta": ("Moisture expansion β", "m³/kg", 1.0e-4, 3.5e-4, "uniform"),
+    "E": ("Young's modulus E", "MPa", 20000.0, 32000.0, "uniform"),
+    "nu": ("Poisson's ratio ν", "dimensionless", 0.15, 0.25, "uniform"),
+    "Csat": ("Saturation Csat", "mol/m³", 150.0, 600.0, "uniform"),
+    "D": ("Diffusivity D", "m²/s", 2.15e-14, 2.0e-12, "log-uniform"),
     "delta_T": ("Temperature change ΔT", "K", 5.0, 60.0, "uniform"),
-    "t_hours": ("Exposure time", "h", 24.0, 8760.0, "log-uniform"),
-    "h_mm": ("Laminate thickness", "mm", 0.2, 3.2, "uniform"),
+    "t_hours": ("Exposure time t", "h", 24.0, 8760.0, "log-uniform"),
+    "h_mm": ("Thickness h", "mm", 0.2, 3.2, "uniform"),
 }
 EXPOSURE = ["delta_T", "t_hours", "h_mm"]
 MATERIAL = [key for key in PARAMETERS if key not in EXPOSURE]
 STUDIES = ["A · Exposure conditions & geometry", "B · Material properties", "Combined · All parameters"]
 FIXED_META = {key: value[:2] for key, value in PARAMETERS.items()}
-FIXED_META.update(alpha_cu=("Copper CTE", "ppm/K"))
+FIXED_META.update(alpha_cu=("Copper CTE αCu", "ppm/K"))
 OUTPUTS = {
     "sigma_index": ("Stress index", "MPa"),
     "sigma_hygro": ("Moisture contribution", "MPa"),
