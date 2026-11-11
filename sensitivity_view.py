@@ -151,13 +151,19 @@ def render_sensitivity_controls(records):
         with ranges_input:
             st.html('<p class="sensitivity-field-label">Parameter ranges</p>')
             with st.container(horizontal=True, gap="small", vertical_alignment="top", key="sens_range_options"):
-                range_mode = st.radio("Parameter ranges", ["Around each material", "Broad exploratory ranges"],
+                range_options = ["Around each material"]
+                if scope == "One material":
+                    range_options.append("Broad exploratory ranges")
+                if st.session_state.get("sens_range_basis", range_options[0]) not in range_options:
+                    st.session_state["sens_range_basis"] = range_options[0]
+                range_mode = st.radio("Parameter ranges", range_options,
                                       key="sens_range_basis", persist_state="session", label_visibility="collapsed")
                 with st.container(width="content", key="sens_range_option_help"):
                     st.markdown("", help="Compare sensitivity near the actual material presets by varying inputs "
                                 "around each material's nominal values.")
-                    st.markdown("", help="Explore the influence of properties across a wider set of possible values, "
-                                "using broad bounds rather than ranges around each material preset.")
+                    if scope == "One material":
+                        st.markdown("", help="Explore the influence of properties across a wider set of possible values, "
+                                    "using broad bounds rather than ranges around each material preset.")
         percent, factor = 10.0, 2.0
         if range_mode == "Around each material":
             percent = variation_input.number_input("Variation (±%)", min_value=0.1,

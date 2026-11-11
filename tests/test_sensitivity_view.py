@@ -90,19 +90,28 @@ class SensitivityViewTests(unittest.TestCase):
         self.assertEqual(bounds["Upper"], 40000.)
 
     def test_comparison_materials_keep_separate_inputs_across_range_modes(self):
+        self.app.radio(key="sens_range_basis").set_value("Broad exploratory ranges").run()
         self.app.pills(key="sens_scope").set_value("Compare materials").run()
+        self.assertFalse(self.app.exception)
+        self.assertEqual(self.app.radio(key="sens_range_basis").options, ["Around each material"])
+        self.assertEqual(self.app.radio(key="sens_range_basis").value, "Around each material")
         self.edit({"E": {"Nominal": 30000., "Lower": 20000., "Upper": 40000.}})
         editors = [item for item in self.app.dataframe if item.key and item.key.startswith("sens_inputs_")]
         self.assertEqual(editors[0].value.set_index("Parameter").loc["E", "Nominal"], 30000.)
         self.assertNotEqual(editors[1].value.set_index("Parameter").loc["E", "Nominal"], 30000.)
+        self.app.pills(key="sens_scope").set_value("One material").run()
+        self.assertIn("Broad exploratory ranges", self.app.radio(key="sens_range_basis").options)
         self.app.radio(key="sens_range_basis").set_value("Broad exploratory ranges").run()
         table = self.app.dataframe[0].value.set_index("Parameter")
         self.assertEqual(table.loc["E", "Nominal"], 30000.)
         self.assertEqual(table.loc["E", "Lower"], 20000.)
-        self.app.radio(key="sens_range_basis").set_value("Around each material").run()
+        self.app.pills(key="sens_scope").set_value("Compare materials").run()
+        self.assertEqual(self.app.radio(key="sens_range_basis").value, "Around each material")
         self.assertEqual(self.app.dataframe[0].value.set_index("Parameter").loc["E", "Lower"], 20000.)
         self.run_analysis()
         self.assertEqual(len(self.app.session_state["sensitivity_batch"]["runs"]), 2)
+        self.assertTrue(all(run["config"]["range_basis"] == "Around each material"
+                            for run in self.app.session_state["sensitivity_batch"]["runs"]))
         self.assertEqual(len(self.results_modal().get("plotly_chart")), 2)
 
     def test_empty_selection_invalid_bounds_and_arrhenius(self):
