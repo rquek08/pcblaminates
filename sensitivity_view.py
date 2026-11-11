@@ -123,7 +123,7 @@ def render_sensitivity_controls(records):
     target = response_input.selectbox("Response to analyse", list(RESPONSE_OPTIONS),
                                       format_func=lambda key: f"{RESPONSE_OPTIONS[key][0]} ({RESPONSE_OPTIONS[key][1]})",
                                       key="sens_output", persist_state="session")
-    keys = st.multiselect("Parameters to vary", allowed, default=[key for key in allowed if key != "nu"],
+    keys = st.multiselect("Parameters to vary", allowed, default=allowed,
                           format_func=lambda key: PARAMETERS[key][0],
                           key=f"sens_parameters_{group}", persist_state="session",
                           help="Selected parameters vary independently. Other inputs stay at their nominal values; copper CTE stays fixed.")
